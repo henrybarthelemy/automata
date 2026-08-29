@@ -226,13 +226,15 @@ kbd {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
 }
 
 .viewport canvas {
   display: block;
   cursor: crosshair;
   touch-action: none;
+}
+
+.viewport canvas.panning {
+  cursor: grabbing;
 }

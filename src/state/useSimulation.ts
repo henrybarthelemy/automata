@@ -3,6 +3,7 @@ import { World, type StepStats } from '../sim/world'
 import { CONWAY, parseRule, type Rule } from '../sim/lifelike'
 import { Canvas2DRenderer } from '../render/canvas2d'
 import { paletteById } from '../render/palettes'
+import { clampView, clampZoom, fitView, zoomAbout, type View } from '../render/view'
 
 export interface SimParams {
   rule: string
@@ -11,10 +12,18 @@ export interface SimParams {
   ageRate: number
   decayRate: number
   paletteId: string
-  cellSize: number
   density: number
   brush: number
+  worldWidth: number
+  worldHeight: number
 }
+
+export const WORLD_PRESETS = [
+  { id: 'small', name: 'Small (200 x 150)', width: 200, height: 150 },
+  { id: 'medium', name: 'Medium (400 x 300)', width: 400, height: 300 },
+  { id: 'large', name: 'Large (800 x 600)', width: 800, height: 600 },
+  { id: 'huge', name: 'Huge (1600 x 1200)', width: 1600, height: 1200 },
+]
 
 export const DEFAULT_PARAMS: SimParams = {
   rule: CONWAY,
@@ -22,9 +31,10 @@ export const DEFAULT_PARAMS: SimParams = {
   ageRate: 28,
   decayRate: 18,
   paletteId: 'ember',
-  cellSize: 5,
   density: 0.28,
   brush: 2,
+  worldWidth: 400,
+  worldHeight: 300,
 }
 
 const EMPTY_STATS: StepStats = { generation: 0, population: 0, births: 0, deaths: 0 }
@@ -36,6 +46,8 @@ export function useSimulation(params: SimParams) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const rendererRef = useRef<Canvas2DRenderer | null>(null)
+  const viewRef = useRef<View>({ zoom: 4, x: 0, y: 0 })
+  const sizeRef = useRef({ width: 0, height: 0 })
   const paramsRef = useRef(params)
   const ruleRef = useRef<Rule>(parseRule(CONWAY)!)
   const runningRef = useRef(false)
@@ -46,6 +58,7 @@ export function useSimulation(params: SimParams) {
   const [running, setRunningState] = useState(false)
   const [stats, setStats] = useState<StepStats>(EMPTY_STATS)
   const [ruleValid, setRuleValid] = useState(true)
+  const [zoom, setZoomState] = useState(viewRef.current.zoom)
 
   paramsRef.current = params
 
@@ -53,6 +66,32 @@ export function useSimulation(params: SimParams) {
     runningRef.current = next
     setRunningState(next)
   }, [])
+
+  /**
+   * Paint immediately rather than waiting on the loop. Discrete actions
+   * (stepping, clearing, drawing, navigating) should show up at once, and it
+   * means the first frame is on screen before any animation frame has run.
+   */
+  const drawNow = useCallback(() => {
+    const world = worldRef.current
+    const renderer = rendererRef.current
+    if (!world || !renderer) return
+    renderer.draw(world, viewRef.current)
+    needsDrawRef.current = false
+  }, [])
+
+  /** Apply a view change, keeping the world in frame and the slider in sync. */
+  const commitView = useCallback(
+    (next: View) => {
+      const world = worldRef.current
+      if (!world) return
+      const { width, height } = sizeRef.current
+      viewRef.current = clampView(next, world.width, world.height, width, height)
+      setZoomState(viewRef.current.zoom)
+      drawNow()
+    },
+    [drawNow],
+  )
 
   // Keep a parsed rule around; typing a half-finished rulestring shouldn't
   // break the running simulation, so invalid text just leaves the last one.
@@ -62,25 +101,13 @@ export function useSimulation(params: SimParams) {
     if (parsed) ruleRef.current = parsed
   }, [params.rule])
 
-  /**
-   * Paint immediately rather than waiting on the loop. Discrete actions
-   * (stepping, clearing, drawing) should show up at once, and it means the
-   * first frame is on screen before any animation frame has run.
-   */
-  const drawNow = useCallback(() => {
-    const world = worldRef.current
-    const renderer = rendererRef.current
-    if (!world || !renderer) return
-    renderer.draw(world)
-    needsDrawRef.current = false
-  }, [])
-
   useEffect(() => {
     rendererRef.current?.setPalette(paletteById(params.paletteId))
     drawNow()
   }, [params.paletteId, drawNow])
 
-  // Size the grid to the container at the current cell size.
+  // Create the world at its chosen size and fit the view to it. The world no
+  // longer tracks the window: resizing just shows more or less of it.
   useEffect(() => {
     const container = containerRef.current
     const canvas = canvasRef.current
@@ -90,28 +117,31 @@ export function useSimulation(params: SimParams) {
       rendererRef.current = new Canvas2DRenderer(canvas, paletteById(paramsRef.current.paletteId))
     }
 
-    const fit = () => {
-      const { cellSize, density } = paramsRef.current
-      const rect = container.getBoundingClientRect()
-      const gridWidth = Math.max(8, Math.floor(rect.width / cellSize))
-      const gridHeight = Math.max(8, Math.floor(rect.height / cellSize))
-
-      if (!worldRef.current) {
-        worldRef.current = new World(gridWidth, gridHeight)
-        worldRef.current.randomize(seedRef.current, density)
-      } else {
-        worldRef.current.resize(gridWidth, gridHeight)
-      }
-      rendererRef.current!.resize(gridWidth, gridHeight, cellSize, window.devicePixelRatio || 1)
-      drawNow()
-      setStats({ ...statsRef.current, population: worldRef.current.population })
+    const { worldWidth, worldHeight, density } = paramsRef.current
+    if (!worldRef.current) {
+      worldRef.current = new World(worldWidth, worldHeight)
+      worldRef.current.randomize(seedRef.current, density)
+    } else {
+      worldRef.current.resize(worldWidth, worldHeight)
     }
 
-    fit()
-    const observer = new ResizeObserver(fit)
+    const measure = () => {
+      const rect = container.getBoundingClientRect()
+      sizeRef.current = { width: rect.width, height: rect.height }
+      rendererRef.current!.resize(rect.width, rect.height, window.devicePixelRatio || 1)
+    }
+
+    measure()
+    commitView(fitView(worldWidth, worldHeight, sizeRef.current.width, sizeRef.current.height))
+    setStats({ ...statsRef.current, population: worldRef.current.population })
+
+    const observer = new ResizeObserver(() => {
+      measure()
+      commitView(viewRef.current)
+    })
     observer.observe(container)
     return () => observer.disconnect()
-  }, [params.cellSize, drawNow])
+  }, [params.worldWidth, params.worldHeight, commitView])
 
   // The loop. Fixed timestep, decoupled from render; React state is never
   // touched per tick.
@@ -147,7 +177,7 @@ export function useSimulation(params: SimParams) {
       }
 
       if (needsDrawRef.current) {
-        renderer.draw(world)
+        renderer.draw(world, viewRef.current)
         needsDrawRef.current = false
       }
 
@@ -200,20 +230,53 @@ export function useSimulation(params: SimParams) {
     [drawNow],
   )
 
-  const cellSizeRef = useRef(params.cellSize)
-  cellSizeRef.current = params.cellSize
-
-  /** Map a client-space point to a grid cell. */
+  /** Map a client-space point to a grid cell under the current view. */
   const cellAt = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current
     if (!canvas) return null
     const rect = canvas.getBoundingClientRect()
-    const size = cellSizeRef.current
+    const view = viewRef.current
     return {
-      x: Math.floor((clientX - rect.left) / size),
-      y: Math.floor((clientY - rect.top) / size),
+      x: Math.floor(view.x + (clientX - rect.left) / view.zoom),
+      y: Math.floor(view.y + (clientY - rect.top) / view.zoom),
     }
   }, [])
+
+  /** Zoom by a multiplier about a point in client space (the wheel path). */
+  const zoomAt = useCallback(
+    (factor: number, clientX: number, clientY: number) => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const rect = canvas.getBoundingClientRect()
+      const view = viewRef.current
+      commitView(zoomAbout(view, view.zoom * factor, clientX - rect.left, clientY - rect.top))
+    },
+    [commitView],
+  )
+
+  /** Zoom about the middle of the viewport (the slider and keyboard path). */
+  const setZoom = useCallback(
+    (next: number) => {
+      const { width, height } = sizeRef.current
+      commitView(zoomAbout(viewRef.current, clampZoom(next), width / 2, height / 2))
+    },
+    [commitView],
+  )
+
+  const panBy = useCallback(
+    (dxCss: number, dyCss: number) => {
+      const view = viewRef.current
+      commitView({ ...view, x: view.x - dxCss / view.zoom, y: view.y - dyCss / view.zoom })
+    },
+    [commitView],
+  )
+
+  const fitToWorld = useCallback(() => {
+    const world = worldRef.current
+    if (!world) return
+    const { width, height } = sizeRef.current
+    commitView(fitView(world.width, world.height, width, height))
+  }, [commitView])
 
   return {
     containerRef,
@@ -222,10 +285,15 @@ export function useSimulation(params: SimParams) {
     setRunning,
     stats,
     ruleValid,
+    zoom,
     stepOnce,
     clear,
     randomize,
     paint,
     cellAt,
+    zoomAt,
+    setZoom,
+    panBy,
+    fitToWorld,
   }
 }

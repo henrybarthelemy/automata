@@ -12,7 +12,7 @@ export default function App() {
     setParams((prev) => ({ ...prev, [key]: value }))
   }, [])
 
-  const { running, setRunning, stepOnce, clear, randomize } = sim
+  const { running, setRunning, stepOnce, clear, randomize, setZoom, fitToWorld } = sim
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -32,11 +32,22 @@ export default function App() {
         case 'c':
           clear()
           break
+        case '+':
+        case '=':
+          setZoom(sim.zoom * 1.4)
+          break
+        case '-':
+        case '_':
+          setZoom(sim.zoom / 1.4)
+          break
+        case '0':
+          fitToWorld()
+          break
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [running, setRunning, stepOnce, clear, randomize])
+  }, [running, setRunning, stepOnce, clear, randomize, setZoom, fitToWorld, sim.zoom])
 
   return (
     <div className="app">
@@ -50,12 +61,17 @@ export default function App() {
         onStep={stepOnce}
         onClear={clear}
         onRandomize={randomize}
+        zoom={sim.zoom}
+        onZoom={setZoom}
+        onFit={fitToWorld}
       />
       <Viewport
         containerRef={sim.containerRef}
         canvasRef={sim.canvasRef}
         paint={sim.paint}
         cellAt={sim.cellAt}
+        zoomAt={sim.zoomAt}
+        panBy={sim.panBy}
         background={paletteById(params.paletteId).background}
       />
     </div>

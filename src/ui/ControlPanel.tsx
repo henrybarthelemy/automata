@@ -1,6 +1,15 @@
-import type { SimParams } from '../state/useSimulation'
+import { WORLD_PRESETS, type SimParams } from '../state/useSimulation'
 import type { StepStats } from '../sim/world'
 import { PALETTES } from '../render/palettes'
+import { MAX_ZOOM, MIN_ZOOM } from '../render/view'
+
+// The useful zoom range spans two orders of magnitude, so the slider is
+// geometric: every notch is the same proportional change.
+const ZOOM_TICKS = 1000
+const toZoomTick = (zoom: number) =>
+  Math.round((Math.log(zoom / MIN_ZOOM) / Math.log(MAX_ZOOM / MIN_ZOOM)) * ZOOM_TICKS)
+const fromZoomTick = (tick: number) =>
+  MIN_ZOOM * (MAX_ZOOM / MIN_ZOOM) ** (tick / ZOOM_TICKS)
 
 interface ControlPanelProps {
   params: SimParams
@@ -12,6 +21,9 @@ interface ControlPanelProps {
   onStep: () => void
   onClear: () => void
   onRandomize: () => void
+  zoom: number
+  onZoom: (zoom: number) => void
+  onFit: () => void
 }
 
 interface SliderProps {
@@ -53,6 +65,9 @@ export function ControlPanel({
   onStep,
   onClear,
   onRandomize,
+  zoom,
+  onZoom,
+  onFit,
 }: ControlPanelProps) {
   return (
     <aside className="panel">
@@ -104,14 +119,6 @@ export function ControlPanel({
           onChange={(v) => onChange('speed', v)}
         />
         <Slider
-          label="Cell size"
-          value={params.cellSize}
-          min={2}
-          max={16}
-          format={(v) => `${v}px`}
-          onChange={(v) => onChange('cellSize', v)}
-        />
-        <Slider
           label="Brush"
           value={params.brush}
           min={1}
@@ -127,6 +134,40 @@ export function ControlPanel({
           format={(v) => `${Math.round(v * 100)}%`}
           onChange={(v) => onChange('density', v)}
         />
+      </section>
+
+      <section>
+        <h2>View</h2>
+        <Slider
+          label="Zoom"
+          value={toZoomTick(zoom)}
+          min={0}
+          max={ZOOM_TICKS}
+          format={() => (zoom < 1 ? `${zoom.toFixed(2)}x` : `${zoom.toFixed(zoom < 10 ? 1 : 0)}x`)}
+          onChange={(tick) => onZoom(fromZoomTick(tick))}
+        />
+        <button onClick={onFit}>Fit world</button>
+        <label className="control">
+          <span className="control-label">World size</span>
+          <select
+            value={`${params.worldWidth}x${params.worldHeight}`}
+            onChange={(event) => {
+              const preset = WORLD_PRESETS.find(
+                (p) => `${p.width}x${p.height}` === event.target.value,
+              )
+              if (!preset) return
+              onChange('worldWidth', preset.width)
+              onChange('worldHeight', preset.height)
+            }}
+          >
+            {WORLD_PRESETS.map((preset) => (
+              <option key={preset.id} value={`${preset.width}x${preset.height}`}>
+                {preset.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="hint">Scroll to zoom, shift-drag or middle-drag to pan.</p>
       </section>
 
       <section>
@@ -182,7 +223,8 @@ export function ControlPanel({
 
       <footer className="hint">
         Drag to draw, alt-drag to erase. <kbd>Space</kbd> play/pause,{' '}
-        <kbd>.</kbd> step, <kbd>N</kbd> randomize, <kbd>C</kbd> clear.
+        <kbd>.</kbd> step, <kbd>N</kbd> randomize, <kbd>C</kbd> clear,{' '}
+        <kbd>+</kbd>/<kbd>-</kbd> zoom, <kbd>0</kbd> fit.
       </footer>
     </aside>
   )
