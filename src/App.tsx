@@ -13,11 +13,13 @@ export default function App() {
   }, [])
 
   const { running, setRunning, stepOnce, clear, randomize, setZoom, fitToWorld } = sim
+  const { stamp, selectStamp, rotateStamp, flipStamp } = sim
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT')) return
+      // Shortcuts are single letters, so they must not fire while typing.
+      if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
       switch (event.key) {
         case ' ':
           event.preventDefault()
@@ -43,11 +45,21 @@ export default function App() {
         case '0':
           fitToWorld()
           break
+        case 'r':
+          if (stamp) rotateStamp()
+          break
+        case 'f':
+          if (stamp) flipStamp()
+          break
+        case 'Escape':
+          selectStamp(null)
+          break
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [running, setRunning, stepOnce, clear, randomize, setZoom, fitToWorld, sim.zoom])
+  }, [running, setRunning, stepOnce, clear, randomize, setZoom, fitToWorld, sim.zoom,
+      stamp, rotateStamp, flipStamp, selectStamp])
 
   return (
     <div className="app">
@@ -64,6 +76,12 @@ export default function App() {
         zoom={sim.zoom}
         onZoom={setZoom}
         onFit={fitToWorld}
+        stamp={stamp}
+        selectStamp={selectStamp}
+        rotateStamp={rotateStamp}
+        flipStamp={flipStamp}
+        importRLE={sim.importRLE}
+        exportRLE={sim.exportRLE}
       />
       <Viewport
         containerRef={sim.containerRef}
@@ -72,6 +90,10 @@ export default function App() {
         cellAt={sim.cellAt}
         zoomAt={sim.zoomAt}
         panBy={sim.panBy}
+        stamping={stamp !== null}
+        moveStamp={sim.moveStamp}
+        hideStamp={sim.hideStamp}
+        placeStamp={sim.placeStamp}
         background={paletteById(params.paletteId).background}
       />
     </div>

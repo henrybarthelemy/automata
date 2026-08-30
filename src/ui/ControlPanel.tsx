@@ -2,6 +2,8 @@ import { WORLD_PRESETS, type SimParams } from '../state/useSimulation'
 import type { StepStats } from '../sim/world'
 import { PALETTES } from '../render/palettes'
 import { MAX_ZOOM, MIN_ZOOM } from '../render/view'
+import { PatternMenu } from './PatternMenu'
+import type { Pattern } from '../sim/rle'
 
 // The useful zoom range spans two orders of magnitude, so the slider is
 // geometric: every notch is the same proportional change.
@@ -24,6 +26,12 @@ interface ControlPanelProps {
   zoom: number
   onZoom: (zoom: number) => void
   onFit: () => void
+  stamp: Pattern | null
+  selectStamp: (pattern: Pattern | null) => void
+  rotateStamp: () => void
+  flipStamp: () => void
+  importRLE: (text: string) => boolean
+  exportRLE: () => string | null
 }
 
 interface SliderProps {
@@ -68,6 +76,12 @@ export function ControlPanel({
   zoom,
   onZoom,
   onFit,
+  stamp,
+  selectStamp,
+  rotateStamp,
+  flipStamp,
+  importRLE,
+  exportRLE,
 }: ControlPanelProps) {
   return (
     <aside className="panel">
@@ -135,6 +149,15 @@ export function ControlPanel({
           onChange={(v) => onChange('density', v)}
         />
       </section>
+
+      <PatternMenu
+        stamp={stamp}
+        selectStamp={selectStamp}
+        rotateStamp={rotateStamp}
+        flipStamp={flipStamp}
+        importRLE={importRLE}
+        exportRLE={exportRLE}
+      />
 
       <section>
         <h2>View</h2>

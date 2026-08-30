@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { World, type StepStats } from '../sim/world'
 import { CONWAY, parseRule, type Rule } from '../sim/lifelike'
 import { Canvas2DRenderer } from '../render/canvas2d'
+import { parseRLE, serializeRLE, rotatePattern, flipPattern, type Pattern } from '../sim/rle'
 import { paletteById } from '../render/palettes'
 import { clampView, clampZoom, fitView, zoomAbout, type View } from '../render/view'
 
@@ -54,11 +55,14 @@ export function useSimulation(params: SimParams) {
   const needsDrawRef = useRef(true)
   const statsRef = useRef<StepStats>(EMPTY_STATS)
   const seedRef = useRef(1)
+  const stampRef = useRef<Pattern | null>(null)
+  const previewRef = useRef<{ x: number; y: number } | null>(null)
 
   const [running, setRunningState] = useState(false)
   const [stats, setStats] = useState<StepStats>(EMPTY_STATS)
   const [ruleValid, setRuleValid] = useState(true)
   const [zoom, setZoomState] = useState(viewRef.current.zoom)
+  const [stamp, setStampState] = useState<Pattern | null>(null)
 
   paramsRef.current = params
 
@@ -76,7 +80,9 @@ export function useSimulation(params: SimParams) {
     const world = worldRef.current
     const renderer = rendererRef.current
     if (!world || !renderer) return
-    renderer.draw(world, viewRef.current)
+    const pattern = stampRef.current
+    const at = previewRef.current
+    renderer.draw(world, viewRef.current, pattern && at ? { pattern, x: at.x, y: at.y } : null)
     needsDrawRef.current = false
   }, [])
 
@@ -177,7 +183,9 @@ export function useSimulation(params: SimParams) {
       }
 
       if (needsDrawRef.current) {
-        renderer.draw(world, viewRef.current)
+        const pattern = stampRef.current
+        const at = previewRef.current
+        renderer.draw(world, viewRef.current, pattern && at ? { pattern, x: at.x, y: at.y } : null)
         needsDrawRef.current = false
       }
 
@@ -271,6 +279,87 @@ export function useSimulation(params: SimParams) {
     [commitView],
   )
 
+  const publishStats = useCallback(() => {
+    const world = worldRef.current
+    if (!world) return
+    statsRef.current = { ...statsRef.current, population: world.population }
+    setStats(statsRef.current)
+  }, [])
+
+  /** Enter or leave stamp mode. Passing null returns to the brush. */
+  const selectStamp = useCallback(
+    (pattern: Pattern | null) => {
+      stampRef.current = pattern
+      setStampState(pattern)
+      if (!pattern) previewRef.current = null
+      drawNow()
+    },
+    [drawNow],
+  )
+
+  /** Track the ghost under the cursor, centred on the pointer. */
+  const moveStamp = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current
+      const pattern = stampRef.current
+      if (!canvas || !pattern) return
+      const rect = canvas.getBoundingClientRect()
+      const view = viewRef.current
+      previewRef.current = {
+        x: Math.floor(view.x + (clientX - rect.left) / view.zoom) - (pattern.width >> 1),
+        y: Math.floor(view.y + (clientY - rect.top) / view.zoom) - (pattern.height >> 1),
+      }
+      drawNow()
+    },
+    [drawNow],
+  )
+
+  const hideStamp = useCallback(() => {
+    if (!previewRef.current) return
+    previewRef.current = null
+    drawNow()
+  }, [drawNow])
+
+  const placeStamp = useCallback(() => {
+    const world = worldRef.current
+    const pattern = stampRef.current
+    const at = previewRef.current
+    if (!world || !pattern || !at) return
+    world.stamp(pattern, at.x, at.y)
+    publishStats()
+    drawNow()
+  }, [drawNow, publishStats])
+
+  const rotateStamp = useCallback(() => {
+    if (!stampRef.current) return
+    selectStamp(rotatePattern(stampRef.current))
+  }, [selectStamp])
+
+  const flipStamp = useCallback(() => {
+    if (!stampRef.current) return
+    selectStamp(flipPattern(stampRef.current))
+  }, [selectStamp])
+
+  /** Load pasted RLE into stamp mode so the user chooses where it lands. */
+  const importRLE = useCallback(
+    (text: string): boolean => {
+      const pattern = parseRLE(text)
+      if (!pattern) return false
+      selectStamp(pattern)
+      return true
+    },
+    [selectStamp],
+  )
+
+  /** The live cells' bounding box as RLE, or null when the board is empty. */
+  const exportRLE = useCallback((): string | null => {
+    const world = worldRef.current
+    if (!world) return null
+    const pattern = world.toPattern()
+    if (!pattern) return null
+    return serializeRLE(pattern, { rule: paramsRef.current.rule })
+  }, [])
+
   const fitToWorld = useCallback(() => {
     const world = worldRef.current
     if (!world) return
@@ -295,5 +384,14 @@ export function useSimulation(params: SimParams) {
     setZoom,
     panBy,
     fitToWorld,
+    stamp,
+    selectStamp,
+    moveStamp,
+    hideStamp,
+    placeStamp,
+    rotateStamp,
+    flipStamp,
+    importRLE,
+    exportRLE,
   }
 }

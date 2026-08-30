@@ -1,5 +1,6 @@
 import { mulberry32 } from './rng'
 import type { Rule } from './lifelike'
+import type { Pattern } from './rle'
 
 export interface StepStats {
   generation: number
@@ -100,6 +101,46 @@ export class World {
         y += sy
       }
     }
+  }
+
+  /**
+   * Place a pattern with its top-left at (x, y). Cells outside the world are
+   * dropped rather than wrapped, so a stamp near an edge is clipped.
+   */
+  stamp(pattern: Pattern, x: number, y: number): void {
+    for (let py = 0; py < pattern.height; py++) {
+      for (let px = 0; px < pattern.width; px++) {
+        if (pattern.cells[py * pattern.width + px]) this.set(x + px, y + py, true)
+      }
+    }
+  }
+
+  /** Extract the bounding box of live cells, for export. Null if empty. */
+  toPattern(): Pattern | null {
+    let minX = this.width
+    let minY = this.height
+    let maxX = -1
+    let maxY = -1
+    for (let y = 0; y < this.height; y++) {
+      const row = (y + 1) * this.stride + 1
+      for (let x = 0; x < this.width; x++) {
+        if (!this.cells[row + x]) continue
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+    }
+    if (maxX < 0) return null
+
+    const width = maxX - minX + 1
+    const height = maxY - minY + 1
+    const cells = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      const row = (minY + y + 1) * this.stride + 1 + minX
+      for (let x = 0; x < width; x++) cells[y * width + x] = this.cells[row + x]
+    }
+    return { width, height, cells }
   }
 
   clear(): void {

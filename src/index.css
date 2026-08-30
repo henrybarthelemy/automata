@@ -144,7 +144,32 @@ input[type='range'] {
   accent-color: var(--accent);
 }
 
+.patterns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+button.pattern {
+  padding: 6px 8px;
+  font-size: 11px;
+  text-align: left;
+  line-height: 1.3;
+}
+
+button.pattern.selected {
+  border-color: var(--accent);
+  background: #2a1a10;
+  color: var(--accent);
+}
+
+textarea.text {
+  resize: vertical;
+  min-height: 62px;
+}
+
 input.text,
+textarea.text,
 select {
   width: 100%;
   padding: 7px 9px;
@@ -155,16 +180,19 @@ select {
   font: inherit;
 }
 
-input.text {
+input.text,
+textarea.text {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.04em;
 }
 
-input.text.invalid {
+input.text.invalid,
+textarea.text.invalid {
   border-color: #7a2f2f;
 }
 
 input.text:focus,
+textarea.text:focus,
 select:focus {
   outline: 1px solid var(--accent);
   border-color: var(--accent);
@@ -237,4 +265,8 @@ kbd {
 
 .viewport canvas.panning {
   cursor: grabbing;
+}
+
+.viewport canvas.stamping {
+  cursor: copy;
 }

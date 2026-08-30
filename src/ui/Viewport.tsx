@@ -8,6 +8,11 @@ interface ViewportProps {
   zoomAt: (factor: number, clientX: number, clientY: number) => void
   panBy: (dxCss: number, dyCss: number) => void
   background: string
+  /** True while a pattern is armed; the brush is suspended until it is placed. */
+  stamping: boolean
+  moveStamp: (clientX: number, clientY: number) => void
+  hideStamp: () => void
+  placeStamp: () => void
 }
 
 export function Viewport({
@@ -18,6 +23,10 @@ export function Viewport({
   zoomAt,
   panBy,
   background,
+  stamping,
+  moveStamp,
+  hideStamp,
+  placeStamp,
 }: ViewportProps) {
   const strokeRef = useRef<{ x: number; y: number } | null>(null)
   const eraseRef = useRef(false)
@@ -55,6 +64,13 @@ export function Viewport({
       return
     }
 
+    // A pattern is armed: click places it rather than painting.
+    if (stamping) {
+      moveStamp(event.clientX, event.clientY)
+      placeStamp()
+      return
+    }
+
     const cell = cellAt(event.clientX, event.clientY)
     if (!cell) return
     eraseRef.current = event.button === 2 || event.altKey
@@ -66,6 +82,10 @@ export function Viewport({
     if (panRef.current) {
       panBy(event.clientX - panRef.current.x, event.clientY - panRef.current.y)
       panRef.current = { x: event.clientX, y: event.clientY }
+      return
+    }
+    if (stamping) {
+      moveStamp(event.clientX, event.clientY)
       return
     }
     if (!strokeRef.current) return
@@ -89,11 +109,12 @@ export function Viewport({
     <div className="viewport" ref={containerRef} style={{ background }}>
       <canvas
         ref={canvasRef}
-        className={panning ? 'panning' : undefined}
+        className={panning ? 'panning' : stamping ? 'stamping' : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endStroke}
         onPointerCancel={endStroke}
+        onPointerLeave={hideStamp}
         onContextMenu={(event) => event.preventDefault()}
       />
     </div>

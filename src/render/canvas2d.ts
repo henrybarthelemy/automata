@@ -1,6 +1,20 @@
 import type { World } from '../sim/world'
+import type { Pattern } from '../sim/rle'
 import { buildLuts, type Palette } from './palettes'
 import type { View } from './view'
+
+/** A pattern ghosted at a grid position, before it is committed. */
+export interface Preview {
+  pattern: Pattern
+  x: number
+  y: number
+}
+
+/** The hottest stop, used to ghost a pattern before it is placed. */
+function brightest(palette: Palette): string {
+  const [r, g, b] = palette.stops[palette.stops.length - 1]
+  return `rgb(${r}, ${g}, ${b})`
+}
 
 function packColor(hex: string): number {
   const n = parseInt(hex.slice(1), 16)
@@ -25,6 +39,7 @@ export class Canvas2DRenderer {
   private trailLut: Uint32Array
   private background = 0xff000000
   private backgroundCss = '#000000'
+  private previewCss = '#ffffff'
   private dpr = 1
 
   constructor(private canvas: HTMLCanvasElement, palette: Palette) {
@@ -42,6 +57,7 @@ export class Canvas2DRenderer {
     this.trailLut = luts.trail
     this.background = packColor(palette.background)
     this.backgroundCss = palette.background
+    this.previewCss = brightest(palette)
   }
 
   setPalette(palette: Palette): void {
@@ -50,6 +66,7 @@ export class Canvas2DRenderer {
     this.trailLut = luts.trail
     this.background = packColor(palette.background)
     this.backgroundCss = palette.background
+    this.previewCss = brightest(palette)
   }
 
   /** The canvas fills its container; the view decides what's shown inside it. */
@@ -73,7 +90,7 @@ export class Canvas2DRenderer {
     this.pixels = new Uint32Array(this.image.data.buffer)
   }
 
-  draw(world: World, view: View): void {
+  draw(world: World, view: View, preview?: Preview | null): void {
     const canvasW = this.canvas.width
     const canvasH = this.canvas.height
     const scale = view.zoom * this.dpr
@@ -129,5 +146,30 @@ export class Canvas2DRenderer {
       visibleW * scale,
       visibleH * scale,
     )
+
+    if (preview) this.drawPreview(preview, view, scale)
+  }
+
+  /**
+   * Ghost the pending stamp on top. Patterns are small — tens of cells — so a
+   * fillRect each is cheaper than another buffer.
+   */
+  private drawPreview(preview: Preview, view: View, scale: number): void {
+    const { pattern, x: originX, y: originY } = preview
+    this.ctx.save()
+    this.ctx.globalAlpha = 0.7
+    this.ctx.fillStyle = this.previewCss
+    for (let py = 0; py < pattern.height; py++) {
+      for (let px = 0; px < pattern.width; px++) {
+        if (!pattern.cells[py * pattern.width + px]) continue
+        this.ctx.fillRect(
+          (originX + px - view.x) * scale,
+          (originY + py - view.y) * scale,
+          Math.max(1, scale),
+          Math.max(1, scale),
+        )
+      }
+    }
+    this.ctx.restore()
   }
 }
