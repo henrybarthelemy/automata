@@ -1,0 +1,254 @@
+# Architecture
+
+A web app for exploring cellular automata: a canvas you can draw on, navigate,
+and retune while it runs. Today it ships Conway's Life; the structure exists so
+that adding Langton's ant or a WebGL backend is additive rather than surgical.
+
+## Layers
+
+Four layers, each depending only on the ones above it. The dependency direction
+is the main invariant worth preserving.
+
+| Layer | Directory | Knows about | Purpose |
+| --- | --- | --- | --- |
+| Simulation | `src/sim/` | nothing | Cell state and the rules that advance it |
+| Rendering | `src/render/` | `sim` (reads only) | Turning cell state into pixels |
+| Orchestration | `src/state/` | `sim`, `render` | The run loop and the bridge to React |
+| Interface | `src/ui/` | `state` (via props) | Controls and pointer handling |
+
+`src/sim/` imports nothing from React, the DOM, or the renderer. That is what
+makes it testable in plain Node — the correctness checks for Conway ran headless
+before any UI existed. `src/render/` imports `World` as a *read* source and never
+mutates it.
+
+```
+src/
+  sim/
+    world.ts       Grid state, neighbour counting, the step function, heat
+    lifelike.ts    B/S rulestring parsing
+    rng.ts         mulberry32, so a seed reproduces a board exactly
+  render/
+    canvas2d.ts    Canvas2D backend: cells -> ImageData -> scaled blit
+    palettes.ts    Colour stops compiled to lookup tables
+    view.ts        Pure camera maths: zoom, pan, clamping, fit
+  state/
+    useSimulation.ts  Owns the world, renderer, view, and the rAF loop
+  ui/
+    Viewport.tsx      Canvas host; pointer, wheel, drag
+    ControlPanel.tsx  Sliders, selects, transport, stats
+  App.tsx        Parameter state and keyboard shortcuts
+  main.tsx       Entry point
+```
+
+## The simulation core
+
+### Halo-padded grid
+
+`World` (`src/sim/world.ts`) holds two `Uint8Array`s that are ping-ponged each
+step. They are allocated at `(width + 2) * (height + 2)`: a one-cell border
+around the real grid.
+
+Before each step `wrapEdges()` copies the outer rows and columns into that
+border from the opposite side. The neighbour loop then reads eight fixed
+flat-index offsets with no modulo and no bounds checks:
+
+```
+n = cells[up - 1] + cells[up] + cells[up + 1]
+  + cells[i - 1]              + cells[i + 1]
+  + cells[down - 1] + cells[down] + cells[down + 1]
+```
+
+This is the single most important performance decision in the codebase. It is
+also why the grid is toroidal — wrapping is a property of how the halo is
+filled, not a branch in the inner loop. A different topology would change
+`wrapEdges()` and nothing else.
+
+The cost is that **every index must be translated**: cell `(x, y)` lives at
+`(y + 1) * stride + (x + 1)`, via `World.index()`. Code that walks the arrays
+directly must account for the offset.
+
+### Rules as bitmasks
+
+`parseRule()` (`src/sim/lifelike.ts`) turns `"B3/S23"` into two 9-bit masks. The
+step is then a table lookup rather than a comparison chain:
+
+```ts
+next[i] = (alive ? survive : born) >> n & 1
+```
+
+Conway is not special-cased anywhere — it is the string `B3/S23`, which is why
+HighLife and Seeds already work by typing them into the rule field.
+
+### The heat buffer
+
+One `Uint8Array` parallel to the cells, carrying a per-cell brightness. On each
+step a live cell ramps up by `ageRate` and a dead one decays by `decayRate`.
+
+This single mechanism produces both visual effects. Age-colouring and trail
+ghosting are the same lookup — `colour = LUT[heat]` — differing only in which
+ramp is used. Turning `decayRate` to its maximum makes trails vanish and gives
+crisp black-and-white. Live cells are floored at `BIRTH_HEAT` so a newborn or
+freshly seeded cell never renders as near-background.
+
+Heat only advances on a simulation step, so pausing freezes trails instead of
+draining them.
+
+## Rendering
+
+### Cost tracks the viewport, not the world
+
+`Canvas2DRenderer.draw()` computes the visible cell span from the view, writes
+one pixel per *visible* cell into an `ImageData`, and blits it scaled with
+`drawImage`. A 1600x1200 world costs the same to draw zoomed-in as a small one,
+because only what is on screen is touched.
+
+The scratch buffer is sized to the widest span the viewport can show, which
+depends only on zoom and canvas size — not on pan position. Panning therefore
+never reallocates. When the visible region is clipped at a world edge the buffer
+is simply source-cropped in `drawImage`.
+
+Below one pixel per cell the blit switches `imageSmoothingEnabled` on. Nearest-
+neighbour downsampling *drops* cells, which makes a sparse board look empty;
+averaging keeps it legible.
+
+### Palettes as lookup tables
+
+A palette is a list of RGB stops. `buildLuts()` expands it once into two
+256-entry `Uint32Array`s of packed little-endian RGBA — one ramp for live cells,
+a dimmed one for trails, so a young live cell never reads as a fading ghost.
+
+The render loop writes through a `Uint32Array` view of the `ImageData` buffer,
+making the inner body a single store per cell. Rebuilding happens only when the
+palette changes.
+
+### Coordinate systems
+
+Five of them, and most bugs in this area come from confusing two:
+
+| Space | Units | Where |
+| --- | --- | --- |
+| Cell | cells, `[0, width)` | `World` API |
+| Storage index | flat array offset | `World.index()`, `(y+1) * stride + (x+1)` |
+| World (fractional) | cells | `View.x`, `View.y` |
+| Canvas CSS | CSS px | `View.zoom` is CSS px per cell |
+| Device | physical px | canvas backing store, CSS x `devicePixelRatio` |
+
+`View.zoom` is CSS pixels per cell. The renderer multiplies by `dpr` to get
+device pixels per cell. Pointer events arrive in client space and are converted
+by `cellAt()`.
+
+### The view is pure
+
+`src/render/view.ts` holds the camera maths as free functions on a plain `View`
+value — no refs, no DOM. `zoomAbout()` pins the world point under a screen
+position across a zoom change; `clampView()` keeps the world in frame, clamping
+to its edges while it overflows and centring it once it doesn't.
+
+Keeping this pure is what made the anchoring behaviour testable and is the
+reason zoom-about-cursor is exact rather than approximately right.
+
+## Orchestration
+
+`useSimulation()` (`src/state/useSimulation.ts`) owns the mutable objects — the
+`World`, the renderer, and the current `View` — all in refs, and exposes an
+imperative API to the UI.
+
+### The React boundary
+
+The central rule: **React state is never touched per tick.** A 60fps render loop
+that calls `setState` every frame would re-render the tree 60 times a second for
+numbers that a human reads a few times a second.
+
+So:
+
+- Simulation results go into `statsRef` on every step.
+- The loop flushes them to React state on a ~100ms timer, for the counters.
+- The canvas is drawn imperatively; it is never React-rendered.
+- Only genuinely UI-shaped state (`running`, `zoom`, `ruleValid`) lives in
+  `useState`.
+
+The mirror of this: `paramsRef.current = params` on every render, so the loop
+always reads current parameters without needing them as effect dependencies.
+
+A practical consequence when testing from a console: React batches, so reading a
+stats value in the same synchronous block that triggered a change returns the
+*previous* committed value. Read across a task boundary.
+
+### Two draw paths
+
+`drawNow()` paints synchronously; the rAF loop paints when `needsDrawRef` is set.
+
+Discrete actions — step, clear, randomize, draw, palette change, any view change
+— call `drawNow()` rather than waiting for the next animation frame. This keeps
+input immediate, and means the first frame reaches the screen before any
+animation frame has run. That matters more than it sounds: an initial paint that
+depends on rAF shows nothing at all in an environment that throttles it.
+
+The loop itself is a fixed-timestep accumulator. Speed is generations per second
+independent of frame rate, with catch-up steps capped per frame so a slow frame
+cannot spiral.
+
+### Rule parsing is deliberately forgiving
+
+A half-typed rulestring like `B3/` must not break a running simulation. Parsing
+keeps the last valid rule and surfaces invalidity as UI state, so typing is
+never destructive.
+
+## Interface
+
+`App.tsx` owns `SimParams` — the plain-data description of a configuration —
+and the keyboard shortcuts. `ControlPanel` is presentational. `Viewport` handles
+pointer and wheel input and translates it into calls on the hook's API.
+
+Two details that are easy to regress:
+
+- **Wheel listening is non-passive**, attached manually rather than via
+  `onWheel`, because React cannot guarantee a non-passive listener and the page
+  would scroll underneath the zoom.
+- **Pointer capture is guarded.** It keeps a drag alive outside the canvas, but
+  can reject a pointer that was already released. Since it is the first
+  statement in the handler, letting it throw abandoned the entire interaction.
+
+Drawing interpolates with Bresenham between successive pointer samples, so fast
+drags do not leave gaps.
+
+## Extension seams
+
+**A new automaton.** Add a module to `src/sim/` exposing its own state and a
+`step` returning `StepStats`. Langton's ant needs an ant position and direction
+alongside the grid; the rendering, view, loop, and controls are unchanged
+because they only consume cells plus heat. The rule field becomes automaton-
+specific (a turn string rather than B/S).
+
+**A new renderer.** `Canvas2DRenderer` is used through a narrow surface —
+`resize`, `setPalette`, `draw(world, view)`. A WebGL backend implements the same
+three methods. The signal to build one: sustained frame drops at a world size
+you care about.
+
+**A new palette.** Append to `PALETTES` in `src/render/palettes.ts`. Stops are
+interpolated, so three to five are plenty.
+
+## Performance
+
+Measured as step plus full redraw, in a headless Chromium at dpr 2:
+
+| World | Cells | Per step + redraw | Ceiling |
+| --- | --- | --- | --- |
+| 400x300 (default) | 120k | 2.5ms | ~400 gen/s |
+| 800x600 | 480k | 9.5ms | ~105 gen/s |
+| 1600x1200 | 1.92M | 39ms | ~26 gen/s |
+
+The speed control caps at 120 gen/s, so the default world has substantial
+headroom and the largest one is the case that would motivate a GPU backend.
+
+## Current limits and loose ends
+
+- **The run loop is the least-verified part.** The headless browser used for
+  automated checks never fires `requestAnimationFrame`, so behaviour is
+  verified by stepping. Continuous playback needs a human eye.
+- `formatRule()` in `src/sim/lifelike.ts` has no callers — it exists for a
+  future rule-preset UI. Remove it if that never arrives.
+- No persistence. Reloading loses the board; URL-encoded state is planned.
+- The world is toroidal with no option for a bounded or infinite grid.
+- Drawing while running races the simulation — edits land between steps, which
+  is usually what you want but is not transactional.
