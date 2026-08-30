@@ -212,6 +212,40 @@ Two details that are easy to regress:
 Drawing interpolates with Bresenham between successive pointer samples, so fast
 drags do not leave gaps.
 
+## Testing
+
+`npm test` runs the suite; `npm run test:watch` keeps it live.
+
+Tests are colocated as `*.test.ts` next to what they cover and run in **plain
+Node** — no jsdom, no canvas. That is possible because `src/sim/`,
+`src/render/view.ts`, and `src/render/palettes.ts` import nothing from the DOM
+or React, and it is the main practical payoff of the layering above. It also
+means the whole suite runs in a fraction of a second, so it is cheap to run on
+every change.
+
+What is covered:
+
+| Area | Focus |
+| --- | --- |
+| `sim/world` | Conway correctness against known patterns, toroidal wrapping including corners, step statistics, heat ramp and decay, brush and drag painting, seeded randomisation, resize, stamp clipping, bounding-box extraction |
+| `sim/lifelike` | Rulestring parsing, normalisation, and rejection of half-typed input |
+| `sim/rle` | Parsing real-world variations, rejecting non-RLE input, serialisation round-trips, line wrapping, rotation and flipping |
+| `render/view` | Zoom clamping, fit, edge clamping and centring, and the cursor-anchoring property |
+| `render/palettes` | Lookup table construction, ramp monotonicity, trail dimming |
+
+**Deliberately not unit tested:** `Canvas2DRenderer` and the React layer. The
+renderer needs a real canvas and is verified by driving the running app and
+inspecting pixels; the hook is mostly wiring over the pieces above.
+
+Two conventions worth keeping:
+
+- **Assert against known Life results, not against our own output.** A glider
+  translating one cell diagonally every four generations is a fact about
+  Conway's Life; a snapshot of whatever our code produced is not.
+- **Use a world big enough not to degenerate.** On a 3x3 torus every cell
+  neighbours every other one, so a blinker explodes instead of oscillating.
+  Wrapping tests use 7x7.
+
 ## Extension seams
 
 **A new automaton.** Add a module to `src/sim/` exposing its own state and a

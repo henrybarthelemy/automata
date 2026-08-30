@@ -20,6 +20,7 @@ Status: **shipped** · **in progress** · **next** · **backlog** · **declined*
 | Zoom about the cursor, pan, fit, selectable world sizes | `4f5bb07` |
 | Architecture documentation | `3e2fd90` |
 | RLE import/export, pattern library, stamp mode | `29c3c5f` |
+| Vitest suite over the simulation, RLE, view, and palette modules | pending |
 
 ## In progress
 
@@ -109,6 +110,20 @@ running megapatterns becomes an actual goal.
 
 **Soup search / census (apgsearch-style).** Catagolue has searched 450 trillion
 soups since 2015. This is research infrastructure, not a visualiser feature.
+
+---
+
+## Working agreement
+
+Test first. The core modules are DOM-free and the suite runs in well under a
+second, so there is no excuse for skipping it:
+
+1. Write a failing test that states the behaviour in terms of a known result.
+2. Implement until it passes.
+3. Run `npm test` before committing.
+
+If a change can't be expressed as a test — a renderer or layout change —
+verify it by driving the running app and say so explicitly in the commit.
 
 ---
 
