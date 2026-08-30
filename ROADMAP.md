@@ -20,7 +20,7 @@ Status: **shipped** · **in progress** · **next** · **backlog** · **declined*
 | Zoom about the cursor, pan, fit, selectable world sizes | `4f5bb07` |
 | Architecture documentation | `3e2fd90` |
 | RLE import/export, pattern library, stamp mode | `29c3c5f` |
-| Vitest suite over the simulation, RLE, view, and palette modules | pending |
+| Vitest suite over the simulation, RLE, view, and palette modules | `7527b90` |
 
 ## In progress
 
