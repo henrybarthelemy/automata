@@ -19,7 +19,7 @@ Status: **shipped** · **in progress** · **next** · **backlog** · **declined*
 | Draw/erase with Bresenham infill, transport controls, live stats | `ace295a` |
 | Zoom about the cursor, pan, fit, selectable world sizes | `4f5bb07` |
 | Architecture documentation | `3e2fd90` |
-| RLE import/export, pattern library, stamp mode | `7dd299d` |
+| RLE import/export, pattern library, stamp mode | `29c3c5f` |
 
 ## In progress
 
