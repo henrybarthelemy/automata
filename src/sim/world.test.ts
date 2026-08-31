@@ -84,6 +84,105 @@ describe('Conway rules', () => {
   })
 })
 
+// Isotropic non-totalistic rules read the arrangement of the neighbours, not
+// just how many there are. These two are published rules with documented
+// behaviour, so they check the letter table end to end rather than checking
+// the engine against itself.
+describe('isotropic non-totalistic rules', () => {
+  // tlife: like Conway, except a live cell does not survive two diametrically
+  // opposite orthogonal neighbours - which is exactly what a blinker's centre
+  // cell sees, so blinkers cannot oscillate.
+  const TLIFE = parseRule('B3/S2-i34q')!
+
+  it('kills a blinker that would oscillate under Conway', () => {
+    const w = world([
+      '.......',
+      '.......',
+      '.......',
+      '.OOO...',
+      '.......',
+      '.......',
+      '.......',
+    ])
+    // The ends have one neighbour and die; the centre sees 2i and dies too.
+    // Only the two cells that see three in a row are born, and they are not
+    // adjacent, so the pattern is gone a generation later.
+    w.step(TLIFE, NO_TRAILS)
+    expect(render(w)).toEqual([
+      '.......',
+      '.......',
+      '..O....',
+      '.......',
+      '..O....',
+      '.......',
+      '.......',
+    ])
+    w.step(TLIFE, NO_TRAILS)
+    expect(w.population).toBe(0)
+  })
+
+  it('still oscillates a blinker under the same rule without the exclusion', () => {
+    const w = world(['.......', '.......', '.......', '.OOO...', '.......', '.......', '.......'])
+    w.step(parseRule('B3/S234q')!, NO_TRAILS)
+    expect(render(w)).toEqual([
+      '.......',
+      '.......',
+      '..O....',
+      '..O....',
+      '..O....',
+      '.......',
+      '.......',
+    ])
+  })
+
+  // Just Friends: B2-a excludes birth on a "domino surface", the corner-and-
+  // edge pair a cell sees alongside a domino. That is the whole reason the
+  // rule is not explosive the way plain B2/S12 is.
+  const JUST_FRIENDS = parseRule('B2-a/S12')!
+
+  it('leaves a domino still under Just Friends', () => {
+    const w = world(['.....', '.....', '.OO..', '.....', '.....'])
+    for (let i = 0; i < 8; i++) w.step(JUST_FRIENDS, NO_TRAILS)
+    expect(render(w)).toEqual(['.....', '.....', '.OO..', '.....', '.....'])
+  })
+
+  it('explodes the same domino once the exclusion is dropped', () => {
+    const w = world(['.....', '.....', '.OO..', '.....', '.....'])
+    w.step(parseRule('B2/S12')!, NO_TRAILS)
+    expect(w.population).toBe(6)
+  })
+
+  // A totalistic rule is the special case where every class of a count is
+  // selected, so it must come out bit-identical to the old counting engine.
+  it('runs plain B/S rules through the same table', () => {
+    const listed = parseRule('B3cekainyqjr/S2cekain3cekainyqjr')!
+    const glider = () => world([
+      '.......',
+      '..O....',
+      '...O...',
+      '.OOO...',
+      '.......',
+      '.......',
+      '.......',
+    ])
+    const a = glider()
+    const b = glider()
+    for (let i = 0; i < 4; i++) {
+      a.step(CONWAY, NO_TRAILS)
+      b.step(listed, NO_TRAILS)
+    }
+    expect(render(b)).toEqual(render(a))
+  })
+
+  it('composes with Generations', () => {
+    // Brian's Brain restricted to births from two opposite orthogonal
+    // neighbours: a horizontal domino has no such cell, so nothing is born.
+    const w = world(['.....', '.....', '.OO..', '.....', '.....'])
+    w.step(parseRule('B2i/S/3')!, NO_TRAILS)
+    expect(w.population).toBe(0)
+  })
+})
+
 // In Generations (`Bx/Sy/n`) a cell that fails to survive does not die
 // outright: it walks down states 2..n-1 first. Those dying cells are not
 // alive, so they neither count as neighbours nor can be born into.

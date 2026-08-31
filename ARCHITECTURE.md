@@ -67,23 +67,54 @@ The cost is that **every index must be translated**: cell `(x, y)` lives at
 `(y + 1) * stride + (x + 1)`, via `World.index()`. Code that walks the arrays
 directly must account for the offset.
 
-### Rules as bitmasks
+### Rules as a lookup table
 
-`parseRule()` (`src/sim/lifelike.ts`) turns `"B3/S23"` into two 9-bit masks. The
-step is then a table lookup rather than a comparison chain:
+The inner loop does not count neighbours. It assembles them into an 8-bit
+**neighbourhood mask** laid out around the centre cell as
 
-```ts
-next[i] = (alive ? survive : born) >> n & 1
+```
+7 6 5
+4 . 3
+2 1 0
 ```
 
-Conway is not special-cased anywhere — it is the string `B3/S23`, which is why
-HighLife and Seeds already work by typing them into the rule field.
+and the step is one array read:
+
+```ts
+next[i] = table[(alive << 8) | n]
+```
+
+`parseRule()` (`src/sim/lifelike.ts`) compiles every supported rulestring into
+that 512-entry table, so there is exactly one execution path. Conway is not
+special-cased anywhere — it is the string `B3/S23`, which is why HighLife and
+Seeds already work by typing them into the rule field.
+
+**Totalistic rules** (`B3/S23`) are the case where every arrangement of a given
+count agrees, so their compilation just fills all the masks of that count with
+the same bit.
+
+**Isotropic non-totalistic rules** narrow a count to particular *arrangements*
+using Hensel notation: `B3/S2-i34q` is tlife, where a live cell does not
+survive the two opposite orthogonal neighbours (`2i`) that a blinker's centre
+sees, so blinkers cannot oscillate. Under the eight symmetries of the square
+the 256 masks collapse into 51 orbits; `src/sim/hensel.ts` holds them, one
+letter each. A leading `-` after a digit inverts the selection within that
+count.
+
+That table is the one piece of the codebase that is transcribed rather than
+derived, and a single wrong hex digit would produce a rule that looks plausible
+but is not the published one. So `hensel.test.ts` recomputes the orbits from
+the symmetry group and asserts the table is exactly them, and two world-level
+tests check published rules by their documented behaviour — a blinker must die
+under tlife, and a domino must sit still under Just Friends (`B2-a/S12`) while
+exploding under plain `B2/S12`.
 
 A third component makes it a **Generations** rule (`Bx/Sy/n`): a cell that
 fails to survive walks down states `2..n-1` before emptying, and while it does
 so it is neither alive nor birthable. The countdown lives in a `dying` array
-kept *separate* from `cells`, so `cells` stays strictly 0/1 and the neighbour
-count remains a raw sum with no comparisons.
+kept *separate* from `cells`, so `cells` stays strictly 0/1 and the mask is
+built from raw values with no comparisons. Generations composes with everything
+above, because dying cells never consult the table at all.
 
 `step()` dispatches to one of two loops rather than branching inside a single
 one. Sharing the loop measured ~14% slower on the binary path, and ordinary
@@ -280,6 +311,11 @@ you care about.
 **A new palette.** Append to `PALETTES` in `src/render/palettes.ts`. Stops are
 interpolated, so three to five are plenty.
 
+**A new rule family.** Anything that maps a cell state plus its eight
+neighbours to a next state is already expressible: build the 512-entry table
+and hand it to `World.step()`. Families with a different neighbourhood — larger
+than Moore, or weighted — are the ones that would need a new loop.
+
 ## Performance
 
 Measured as step plus full redraw, in a headless Chromium at dpr 2:
@@ -292,6 +328,12 @@ Measured as step plus full redraw, in a headless Chromium at dpr 2:
 
 The speed control caps at 120 gen/s, so the default world has substantial
 headroom and the largest one is the case that would motivate a GPU backend.
+
+Replacing the neighbour sum with a neighbourhood mask cost the Conway hot path
+a consistent ~6% (0.62 → 0.66ms per step alone at 400x300, measured over 300
+steps). That buys the entire isotropic rule space on the same code path, and it
+is invisible next to the redraw, so it was taken deliberately rather than
+worked around.
 
 ## Current limits and loose ends
 

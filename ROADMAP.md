@@ -22,6 +22,7 @@ Deliberately no commit hashes here — they go stale on every rebase, and
 - RLE import/export, built-in pattern library, stamp placement
 - Vitest suite over the simulation, RLE, view, and palette modules
 - Generations rules (`Bx/Sy/n`) with rule-driven state colouring
+- Isotropic non-totalistic rules in Hensel notation, on a shared 512-entry table
 - Architecture and roadmap documentation
 
 ## In progress
@@ -32,21 +33,8 @@ Nothing currently.
 
 ## Next up
 
-### Isotropic non-totalistic rules (Hensel notation)
-
-**Size:** medium · **Depends on:** nothing
-
-Rules that consider the *arrangement* of neighbours, not just the count — a cell
-might be born from three neighbours in a row but not in an L.
-
-Architecturally the most elegant item on this list: replace the neighbour *sum*
-with a 9-bit neighbourhood *index* into a 512-entry lookup table. Same eight
-reads the inner loop already does, vastly larger rule space. Totalistic rules
-become a special case (fill the table from a B/S mask).
-
-- Neighbourhood bitmask instead of a sum in `World.step()`
-- Hensel notation parser
-- Keep B/S input working by compiling it down to the same table
+Pick the next item from the backlog below. The population graph is the smallest
+piece of remaining value, and permalinks the most-asked-for.
 
 ---
 
@@ -71,6 +59,7 @@ become a special case (fill the table from a B/S mask).
 | Pattern identification | medium | — | Hash the board to detect still lifes, oscillator periods, spaceship displacement. Cheap relative to how delightful it is — "that's a period-15 oscillator" |
 | Camera tracking | small | — | Auto-follow a spaceship so it stays centred; pairs naturally with the view transform |
 | Langton's ant / turmites | medium | — | The original motivation. New module in `src/sim/`; renderer, view, and loop are unchanged since they only consume cells plus heat |
+| Hensel letter picker | small | — | The rule field parses all 51 classes but nothing shows them; a grid of 3x3 shapes per count, toggled on and off, writes the rulestring |
 | Larger than Life / HROT | medium | — | Needs prefix-sum accumulation to stay fast at radius > 1 |
 | More pattern formats (Life 1.05/1.06, plaintext `.cells`) | small | — | RLE already exists; these are variations on the same parser |
 
@@ -123,8 +112,13 @@ verify it by driving the running app and say so explicitly in the commit.
   browser used for automated checks never fires `requestAnimationFrame`, so
   continuous playback is verified by stepping. Needs a human eye, or a test
   harness that can drive real frames.
-- `formatRule()` in `src/sim/lifelike.ts` has no callers. It exists for a future
-  rule-preset UI; delete it if that never arrives.
+- `formatRule()` in `src/sim/lifelike.ts` still has no callers outside its tests.
+  It now does real work — normalising Hensel letter order and choosing between
+  the listed and excluded forms — so it is worth more than it was, but it is
+  still waiting on a rule-preset UI or permalinks to use it.
+- The rule field accepts Hensel notation but nothing advertises which letters
+  exist for which count. A picker showing the 51 shapes is the obvious follow-up,
+  and is listed in the backlog.
 - No persistence — reloading loses the board. Addressed by permalinks.
 - Drawing while running races the simulation. Edits land between steps, which is
   usually what you want, but it isn't transactional.

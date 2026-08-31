@@ -268,7 +268,7 @@ export class World {
   /** Ordinary two-state Life. Kept free of Generations bookkeeping. */
   private stepBinary(rule: Rule, heatParams: HeatParams) {
     const { cells, next, heat, stride, width: w, height: h } = this
-    const { born, survive } = rule
+    const { table } = rule
     const { ageRate, decayRate } = heatParams
 
     let population = 0
@@ -281,13 +281,15 @@ export class World {
         const i = row + x
         const up = i - stride
         const down = i + stride
+        // The eight neighbours as a bitmask, laid out 7 6 5 / 4 . 3 / 2 1 0,
+        // so the rule's table can distinguish arrangements and not just counts.
         const n =
-          cells[up - 1] + cells[up] + cells[up + 1] +
-          cells[i - 1] + cells[i + 1] +
-          cells[down - 1] + cells[down] + cells[down + 1]
+          (cells[up - 1] << 7) | (cells[up] << 6) | (cells[up + 1] << 5) |
+          (cells[i - 1] << 4) | (cells[i + 1] << 3) |
+          (cells[down - 1] << 2) | (cells[down] << 1) | cells[down + 1]
 
         const alive = cells[i]
-        const nextAlive = (alive ? survive : born) >> n & 1
+        const nextAlive = table[(alive << 8) | n]
         next[i] = nextAlive
 
         if (nextAlive) {
@@ -315,7 +317,7 @@ export class World {
    */
   private stepGenerations(rule: Rule, heatParams: HeatParams) {
     const { cells, next, dying, nextDying, heat, stride, width: w, height: h } = this
-    const { born, survive, states } = rule
+    const { table, states } = rule
     const { ageRate } = heatParams
     const lastState = states - 1
 
@@ -329,10 +331,12 @@ export class World {
         const i = row + x
         const up = i - stride
         const down = i + stride
+        // The eight neighbours as a bitmask, laid out 7 6 5 / 4 . 3 / 2 1 0,
+        // so the rule's table can distinguish arrangements and not just counts.
         const n =
-          cells[up - 1] + cells[up] + cells[up + 1] +
-          cells[i - 1] + cells[i + 1] +
-          cells[down - 1] + cells[down] + cells[down + 1]
+          (cells[up - 1] << 7) | (cells[up] << 6) | (cells[up + 1] << 5) |
+          (cells[i - 1] << 4) | (cells[i + 1] << 3) |
+          (cells[down - 1] << 2) | (cells[down] << 1) | cells[down + 1]
 
         const alive = cells[i]
         const countdown = dying[i]
@@ -340,14 +344,14 @@ export class World {
         let nextCountdown = 0
 
         if (alive) {
-          nextAlive = survive >> n & 1
+          nextAlive = table[256 | n]
           if (!nextAlive) nextCountdown = 2
         } else if (countdown) {
           // Deaf to its neighbours; it only counts down.
           const advanced = countdown + 1
           nextCountdown = advanced > lastState ? 0 : advanced
         } else {
-          nextAlive = born >> n & 1
+          nextAlive = table[n]
         }
 
         next[i] = nextAlive

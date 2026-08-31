@@ -109,7 +109,7 @@ export function ControlPanel({
         <h2>Rule</h2>
         <label className="control">
           <span className="control-label">
-            B/S notation
+            Rulestring
             {!ruleValid && <em className="invalid">unparsed</em>}
           </span>
           <input
@@ -124,6 +124,13 @@ export function ControlPanel({
           number for Generations, where cells fade through that many states
           before dying &mdash; B2/S/3 is Brian&rsquo;s Brain, B2/S345/4 is Star
           Wars.
+        </p>
+        <p className="hint">
+          Counts can be narrowed to particular neighbour <em>arrangements</em>{' '}
+          with Hensel letters, and <code>-</code> excludes instead of listing.
+          B3/S2-i34q is tlife, where a blinker cannot oscillate because{' '}
+          <code>2i</code> is the two opposite neighbours its centre sees;
+          B2-a/S12 is Just Friends.
         </p>
       </section>
 
