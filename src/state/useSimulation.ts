@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { World, type StepStats } from '../sim/world'
-import { CONWAY, parseRule, type Rule } from '../sim/lifelike'
+import { CONWAY, parseRule, ruleError, type Rule } from '../sim/lifelike'
 import { Canvas2DRenderer } from '../render/canvas2d'
 import { parseRLE, serializeRLE, rotatePattern, flipPattern, type Pattern } from '../sim/rle'
 import { paletteById } from '../render/palettes'
@@ -61,6 +61,7 @@ export function useSimulation(params: SimParams) {
   const [running, setRunningState] = useState(false)
   const [stats, setStats] = useState<StepStats>(EMPTY_STATS)
   const [ruleValid, setRuleValid] = useState(true)
+  const [ruleProblem, setRuleProblem] = useState<string | null>(null)
   const [ruleStates, setRuleStates] = useState(2)
   const [zoom, setZoomState] = useState(viewRef.current.zoom)
   const [stamp, setStampState] = useState<Pattern | null>(null)
@@ -105,6 +106,7 @@ export function useSimulation(params: SimParams) {
   useEffect(() => {
     const parsed = parseRule(params.rule)
     setRuleValid(parsed !== null)
+    setRuleProblem(ruleError(params.rule))
     if (parsed) {
       ruleRef.current = parsed
       setRuleStates(parsed.states)
@@ -378,6 +380,7 @@ export function useSimulation(params: SimParams) {
     setRunning,
     stats,
     ruleValid,
+    ruleProblem,
     ruleStates,
     zoom,
     stepOnce,

@@ -23,6 +23,9 @@ Deliberately no commit hashes here — they go stale on every rebase, and
 - Vitest suite over the simulation, RLE, view, and palette modules
 - Generations rules (`Bx/Sy/n`) with rule-driven state colouring
 - Isotropic non-totalistic rules in Hensel notation, on a shared 512-entry table
+- Collapsible panel sections with per-section info popovers
+- Six-step guided tour, launched from a button rather than on first load
+- Rulestring errors that name the offending character
 - Architecture and roadmap documentation
 
 ## In progress
@@ -45,6 +48,8 @@ piece of remaining value, and permalinks the most-asked-for.
 | Item | Size | Depends on | Note |
 | --- | --- | --- | --- |
 | Population graph | small | — | Stats already computed free in the step loop; needs a ring buffer and a sparkline canvas |
+| Rule presets | small | — | Named chips (Conway, HighLife, Seeds, Day & Night, Brian's Brain, tlife, Just Friends) filling the rule field; `formatRule()` normalises for match-highlighting, which would finally give it a caller |
+| Warm cold start | small | — | The app opens on an empty paused board; seeding a Gosper gun and playing would change the first impression more than anything else its size |
 | Permalinks | small | — | Seeded RNG already makes boards reproducible from an integer; embed drawn boards as RLE under a size budget |
 | Fast-forward (steps per draw) | small | — | We cap at 120 gen/s only because we redraw every step; decoupling lets you skip 1000 generations to see where a pattern settles |
 | More palettes / themes | small | — | Stops are interpolated; appending to `PALETTES` is the whole job |
@@ -117,8 +122,14 @@ verify it by driving the running app and say so explicitly in the commit.
   the listed and excluded forms — so it is worth more than it was, but it is
   still waiting on a rule-preset UI or permalinks to use it.
 - The rule field accepts Hensel notation but nothing advertises which letters
-  exist for which count. A picker showing the 51 shapes is the obvious follow-up,
-  and is listed in the backlog.
+  exist for which count. The rule popover explains the syntax and a bad letter
+  now names the legal ones, but a picker showing the 51 shapes is still the
+  obvious follow-up, and is listed in the backlog.
+- The tour leaves the sections it opened open, and the panel scrolled where it
+  left it. Harmless, and arguably right, but it is not a considered decision.
+- `InfoTip`, `Section`, and `Tour` have no component tests - the suite runs in
+  plain Node with no jsdom. Their placement maths is tested via `coachmark.ts`;
+  the rest was verified by driving the app.
 - No persistence — reloading loses the board. Addressed by permalinks.
 - Drawing while running races the simulation. Edits land between steps, which is
   usually what you want, but it isn't transactional.

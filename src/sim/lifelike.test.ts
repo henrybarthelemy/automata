@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONWAY, formatRule, isTotalistic, parseRule } from './lifelike'
+import { CONWAY, formatRule, isTotalistic, parseRule, ruleError } from './lifelike'
 import { ALL, LETTERS } from './hensel'
 
 /**
@@ -196,5 +196,65 @@ describe('formatRule', () => {
 
   it('orders letters canonically', () => {
     expect(formatRule(parseRule('B3ria/S')!)).toBe('B3air/S')
+  })
+})
+
+// The rule field is the most powerful control in the app and the easiest to
+// mistype, so a rejected rulestring says what is wrong with it rather than
+// just refusing. `ruleError` is null exactly when `parseRule` succeeds.
+describe('ruleError', () => {
+  it.each(['B3/S23', 'B2-a/S12', 'B3/S2-i34q', 'B2/S/3', 'b36s23'])(
+    'says nothing about the valid rule %o',
+    (input) => {
+      expect(ruleError(input)).toBeNull()
+    },
+  )
+
+  it('agrees with parseRule on every input it is given', () => {
+    const inputs = [
+      '', 'B3', 'S23', 'B3/S23', 'B9/S2', 'B2t/S3', 'B3-/S2', 'B3/S23/1',
+      'B3/S23/x', 'B3/S23/4/5', 'nonsense', 'B2-a/S12', 'B/S', 'B3/S23/256',
+    ]
+    for (const input of inputs) {
+      expect(ruleError(input) === null).toBe(parseRule(input) !== null)
+    }
+  })
+
+  it('asks for a rule when the field is empty', () => {
+    expect(ruleError('')).toMatch(/B3\/S23/)
+  })
+
+  it('names the missing half', () => {
+    expect(ruleError('B3')).toMatch(/S/)
+    expect(ruleError('S23')).toMatch(/^A rulestring starts with B/)
+  })
+
+  it('names the offending neighbour count', () => {
+    expect(ruleError('B9/S2')).toMatch(/9/)
+    expect(ruleError('B9/S2')).toMatch(/0 to 8/)
+  })
+
+  it('names the offending letter and what is allowed there', () => {
+    const message = ruleError('B2t/S3')!
+    expect(message).toContain('t')
+    expect(message).toContain('2')
+    expect(message).toContain('cekain')
+  })
+
+  it('explains a dash with nothing after it', () => {
+    expect(ruleError('B3-/S2')).toMatch(/-/)
+  })
+
+  it('explains a bad state count', () => {
+    expect(ruleError('B3/S23/1')).toMatch(/2 (to|and) 256/)
+    expect(ruleError('B3/S23/x')).toMatch(/2 (to|and) 256/)
+  })
+
+  it('is a single sentence', () => {
+    for (const input of ['', 'B3', 'B9/S2', 'B2t/S3', 'B3-/S2', 'B3/S23/1']) {
+      const message = ruleError(input)!
+      expect(message).toMatch(/\.$/)
+      expect(message.split('. ').length).toBeLessThanOrEqual(2)
+    }
   })
 })

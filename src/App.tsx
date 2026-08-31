@@ -3,20 +3,51 @@ import { DEFAULT_PARAMS, useSimulation, type SimParams } from './state/useSimula
 import { paletteById } from './render/palettes'
 import { ControlPanel } from './ui/ControlPanel'
 import { Viewport } from './ui/Viewport'
+import { Tour } from './ui/Tour'
+import { TOUR_STEPS } from './ui/tourSteps'
+
+/** Rule and Simulation are what you reach for first; the rest start folded. */
+const DEFAULT_SECTIONS: Record<string, boolean> = {
+  rule: true,
+  simulation: true,
+  patterns: false,
+  view: false,
+  look: false,
+  stats: true,
+}
 
 export default function App() {
   const [params, setParams] = useState<SimParams>(DEFAULT_PARAMS)
+  const [openSections, setOpenSections] = useState(DEFAULT_SECTIONS)
+  const [tourStep, setTourStep] = useState<number | null>(null)
   const sim = useSimulation(params)
 
   const update = useCallback(<K extends keyof SimParams>(key: K, value: SimParams[K]) => {
     setParams((prev) => ({ ...prev, [key]: value }))
   }, [])
 
+  const toggleSection = useCallback((id: string) => {
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }))
+  }, [])
+
   const { running, setRunning, stepOnce, clear, randomize, setZoom, fitToWorld } = sim
   const { stamp, selectStamp, rotateStamp, flipStamp } = sim
 
+  // A step that points into the panel needs its section open, or the target
+  // is `hidden` and cannot be measured.
+  useEffect(() => {
+    if (tourStep === null) return
+    const section = TOUR_STEPS[tourStep].section
+    if (!section) return
+    setOpenSections((prev) => (prev[section] ? prev : { ...prev, [section]: true }))
+  }, [tourStep])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // The tour owns the keyboard while it is up. It also stops propagation,
+      // but that relies on capture running before this listener, and clearing
+      // the board out from under a tour step is not a subtlety worth risking.
+      if (tourStep !== null) return
       const target = event.target as HTMLElement | null
       // Shortcuts are single letters, so they must not fire while typing.
       if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
@@ -59,7 +90,7 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [running, setRunning, stepOnce, clear, randomize, setZoom, fitToWorld, sim.zoom,
-      stamp, rotateStamp, flipStamp, selectStamp])
+      stamp, rotateStamp, flipStamp, selectStamp, tourStep])
 
   return (
     <div className="app">
@@ -69,6 +100,7 @@ export default function App() {
         running={running}
         setRunning={setRunning}
         ruleValid={sim.ruleValid}
+        ruleProblem={sim.ruleProblem}
         ruleStates={sim.ruleStates}
         stats={sim.stats}
         onStep={stepOnce}
@@ -83,6 +115,9 @@ export default function App() {
         flipStamp={flipStamp}
         importRLE={sim.importRLE}
         exportRLE={sim.exportRLE}
+        openSections={openSections}
+        onToggleSection={toggleSection}
+        onStartTour={() => setTourStep(0)}
       />
       <Viewport
         containerRef={sim.containerRef}
@@ -97,6 +132,14 @@ export default function App() {
         placeStamp={sim.placeStamp}
         background={paletteById(params.paletteId).background}
       />
+      {tourStep !== null && (
+        <Tour
+          steps={TOUR_STEPS}
+          index={tourStep}
+          onIndex={setTourStep}
+          onClose={() => setTourStep(null)}
+        />
+      )}
     </div>
   )
 }

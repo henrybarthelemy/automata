@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { PATTERN_LIBRARY } from '../patterns/library'
 import { parseRLE, type Pattern } from '../sim/rle'
+import { Section } from './Section'
 
 interface PatternMenuProps {
+  open: boolean
+  onToggle: (id: string) => void
   stamp: Pattern | null
   selectStamp: (pattern: Pattern | null) => void
   rotateStamp: () => void
@@ -12,6 +15,8 @@ interface PatternMenuProps {
 }
 
 export function PatternMenu({
+  open,
+  onToggle,
   stamp,
   selectStamp,
   rotateStamp,
@@ -63,10 +68,27 @@ export function PatternMenu({
   }
 
   return (
-    <section>
-      <h2>Patterns</h2>
-
-      <div className="patterns">
+    <Section
+      id="patterns"
+      title="Patterns"
+      open={open}
+      onToggle={onToggle}
+      info={
+        <>
+          <p>
+            Choosing a pattern arms a stamp that follows the cursor; click the
+            board to place it, <kbd>R</kbd> to rotate, <kbd>F</kbd> to flip.
+          </p>
+          <p>
+            <strong>Paste RLE</strong> takes the run-length format LifeWiki
+            publishes, so anything from there can be dropped straight in, and
+            <strong> Copy board</strong> writes the live cells back out the same
+            way.
+          </p>
+        </>
+      }
+    >
+      <div className="patterns" data-tour="patterns">
         {PATTERN_LIBRARY.map((entry) => (
           <button
             key={entry.id}
@@ -121,6 +143,6 @@ export function PatternMenu({
       )}
 
       {copied && <p className="hint">{copied}</p>}
-    </section>
+    </Section>
   )
 }

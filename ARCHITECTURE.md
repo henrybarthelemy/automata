@@ -243,6 +243,44 @@ A half-typed rulestring like `B3/` must not break a running simulation. Parsing
 keeps the last valid rule and surfaces invalidity as UI state, so typing is
 never destructive.
 
+It is also expected to say *why*. `parse()` returns either a rule or a sentence;
+`parseRule()` throws the sentence away and `ruleError()` throws the rule away, so
+the two can never disagree about whether a string is valid — a property the tests
+assert directly. With 51 Hensel classes, "unparsed" alone would leave the letter
+space unguessable, so the message names the offending character and what is
+allowed in its place.
+
+### The panel explains itself on demand
+
+Every section heading carries an `InfoTip` — a popover holding the prose that
+used to sit permanently under the controls. The panel is a single 268px column,
+and always-on explanation crowded out the thing being explained.
+
+Sections are collapsible, and stay mounted when collapsed so their state
+survives. `hidden` means a collapsed control cannot be measured, so a tour step
+that points into a section names it and the tour opens it first.
+
+### The tour
+
+`Tour` renders a scrim, a spotlight, and a card, positioned by `placeCoachMark`
+in `src/ui/coachmark.ts`. That function is pure — rectangles in, coordinates out
+— so the awkward part, deciding which side a card goes on and keeping it inside
+the window, is unit-tested in Node like the simulation core. The component is
+left with measuring and rendering.
+
+Two deliberate choices:
+
+- **Started from a button, not on first load.** An unrequested tour in front of
+  an empty canvas is worse than no tour.
+- **Measured in a layout effect, not on `requestAnimationFrame`.** The headless
+  browser used for verification never fires rAF, and a tour that cannot be
+  driven cannot be checked.
+
+While the tour is up it owns the keyboard. It stops propagation on `keydown`,
+*and* `App` skips its shortcut handler when a tour is open — the capture-phase
+ordering that makes the first mechanism work is real but subtle, and clearing
+the board out from under a tour step is not worth the subtlety.
+
 ## Interface
 
 `App.tsx` owns `SimParams` — the plain-data description of a configuration —
@@ -277,14 +315,19 @@ What is covered:
 | Area | Focus |
 | --- | --- |
 | `sim/world` | Conway correctness against known patterns, toroidal wrapping including corners, step statistics, heat ramp and decay, brush and drag painting, seeded randomisation, resize, stamp clipping, bounding-box extraction |
-| `sim/lifelike` | Rulestring parsing, normalisation, and rejection of half-typed input |
+| `sim/lifelike` | Rulestring parsing, normalisation, rejection of half-typed input, and the wording of the rejection |
+| `sim/hensel` | The 51 isotropic classes, recomputed from the symmetry group and compared against the table |
+| `ui/coachmark` | Tour-card placement: preferred side, flipping, centring, and staying inside the window |
 | `sim/rle` | Parsing real-world variations, rejecting non-RLE input, serialisation round-trips, line wrapping, rotation and flipping |
 | `render/view` | Zoom clamping, fit, edge clamping and centring, and the cursor-anchoring property |
 | `render/palettes` | Lookup table construction, ramp monotonicity, trail dimming |
 
 **Deliberately not unit tested:** `Canvas2DRenderer` and the React layer. The
 renderer needs a real canvas and is verified by driving the running app and
-inspecting pixels; the hook is mostly wiring over the pieces above.
+inspecting pixels; the hook is mostly wiring over the pieces above. The same
+goes for `InfoTip`, `Section`, and `Tour` — but the maths each of them depends
+on was pulled out into `coachmark.ts`, which *is* tested, leaving the components
+with little more than measuring and rendering.
 
 Two conventions worth keeping:
 
@@ -310,6 +353,10 @@ you care about.
 
 **A new palette.** Append to `PALETTES` in `src/render/palettes.ts`. Stops are
 interpolated, so three to five are plenty.
+
+**A new tour step.** Append to `TOUR_STEPS` in `src/ui/tourSteps.tsx` with a
+`data-tour` selector, a preferred side, and the section it lives in. Nothing
+else changes; the count in the card updates itself.
 
 **A new rule family.** Anything that maps a cell state plus its eight
 neighbours to a next state is already expressible: build the 512-entry table

@@ -106,7 +106,7 @@ export function Viewport({
   }
 
   return (
-    <div className="viewport" ref={containerRef} style={{ background }}>
+    <div className="viewport" data-tour="canvas" ref={containerRef} style={{ background }}>
       <canvas
         ref={canvasRef}
         className={panning ? 'panning' : stamping ? 'stamping' : undefined}

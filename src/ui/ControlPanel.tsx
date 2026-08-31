@@ -3,6 +3,7 @@ import type { StepStats } from '../sim/world'
 import { PALETTES } from '../render/palettes'
 import { MAX_ZOOM, MIN_ZOOM } from '../render/view'
 import { PatternMenu } from './PatternMenu'
+import { Section } from './Section'
 import type { Pattern } from '../sim/rle'
 
 // The useful zoom range spans two orders of magnitude, so the slider is
@@ -19,6 +20,7 @@ interface ControlPanelProps {
   running: boolean
   setRunning: (running: boolean) => void
   ruleValid: boolean
+  ruleProblem: string | null
   ruleStates: number
   stats: StepStats
   onStep: () => void
@@ -33,6 +35,9 @@ interface ControlPanelProps {
   flipStamp: () => void
   importRLE: (text: string) => boolean
   exportRLE: () => string | null
+  openSections: Record<string, boolean>
+  onToggleSection: (id: string) => void
+  onStartTour: () => void
 }
 
 interface SliderProps {
@@ -70,6 +75,7 @@ export function ControlPanel({
   running,
   setRunning,
   ruleValid,
+  ruleProblem,
   ruleStates,
   stats,
   onStep,
@@ -84,15 +90,22 @@ export function ControlPanel({
   flipStamp,
   importRLE,
   exportRLE,
+  openSections,
+  onToggleSection,
+  onStartTour,
 }: ControlPanelProps) {
   return (
     <aside className="panel">
       <header className="panel-header">
         <h1>Automata</h1>
-        <p>Conway&rsquo;s Life</p>
+        <p>Life-like cellular automata</p>
       </header>
 
-      <div className="transport">
+      <button type="button" className="tour-start" onClick={onStartTour} data-tour="start">
+        Take a tour
+      </button>
+
+      <div className="transport" data-tour="transport">
         <button className="primary" onClick={() => setRunning(!running)}>
           {running ? 'Pause' : 'Play'}
         </button>
@@ -105,9 +118,36 @@ export function ControlPanel({
         <button onClick={onClear}>Clear</button>
       </div>
 
-      <section>
-        <h2>Rule</h2>
-        <label className="control">
+      <Section
+        id="rule"
+        title="Rule"
+        open={openSections.rule}
+        onToggle={onToggleSection}
+        info={
+          <>
+            <p>
+              <code>B3/S23</code> is Conway: a dead cell with 3 live neighbours is
+              born, and a live cell with 2 or 3 survives. Try <code>B36/S23</code>{' '}
+              (HighLife) or <code>B2/S</code> (Seeds).
+            </p>
+            <p>
+              A third number makes it a <strong>Generations</strong> rule, where
+              cells fade through that many states before dying &mdash;{' '}
+              <code>B2/S/3</code> is Brian&rsquo;s Brain, <code>B2/S345/4</code> is
+              Star Wars.
+            </p>
+            <p>
+              Counts can also be narrowed to particular neighbour{' '}
+              <em>arrangements</em> using Hensel letters, with <code>-</code> to
+              exclude rather than list. <code>B3/S2-i34q</code> is tlife, where a
+              blinker cannot oscillate because <code>2i</code> is the two opposite
+              neighbours its centre cell sees. <code>B2-a/S12</code> is Just
+              Friends.
+            </p>
+          </>
+        }
+      >
+        <label className="control" data-tour="rule">
           <span className="control-label">
             Rulestring
             {!ruleValid && <em className="invalid">unparsed</em>}
@@ -116,26 +156,37 @@ export function ControlPanel({
             className={ruleValid ? 'text' : 'text invalid'}
             value={params.rule}
             spellCheck={false}
+            aria-invalid={!ruleValid}
+            aria-describedby={ruleProblem ? 'rule-problem' : undefined}
             onChange={(event) => onChange('rule', event.target.value)}
           />
         </label>
-        <p className="hint">
-          B3/S23 is Conway. Try B36/S23 (HighLife) or B2/S (Seeds). Add a third
-          number for Generations, where cells fade through that many states
-          before dying &mdash; B2/S/3 is Brian&rsquo;s Brain, B2/S345/4 is Star
-          Wars.
-        </p>
-        <p className="hint">
-          Counts can be narrowed to particular neighbour <em>arrangements</em>{' '}
-          with Hensel letters, and <code>-</code> excludes instead of listing.
-          B3/S2-i34q is tlife, where a blinker cannot oscillate because{' '}
-          <code>2i</code> is the two opposite neighbours its centre sees;
-          B2-a/S12 is Just Friends.
-        </p>
-      </section>
+        {ruleProblem && (
+          <p className="hint problem" id="rule-problem" role="status">
+            {ruleProblem}
+          </p>
+        )}
+      </Section>
 
-      <section>
-        <h2>Simulation</h2>
+      <Section
+        id="simulation"
+        title="Simulation"
+        open={openSections.simulation}
+        onToggle={onToggleSection}
+        info={
+          <>
+            <p>
+              <strong>Speed</strong> is generations per second, held independent
+              of the frame rate.
+            </p>
+            <p>
+              <strong>Brush</strong> is how many cells wide your drag paints.{' '}
+              <strong>Seed density</strong> is the fraction of cells{' '}
+              <em>Randomize</em> fills.
+            </p>
+          </>
+        }
+      >
         <Slider
           label="Speed"
           value={params.speed}
@@ -160,9 +211,11 @@ export function ControlPanel({
           format={(v) => `${Math.round(v * 100)}%`}
           onChange={(v) => onChange('density', v)}
         />
-      </section>
+      </Section>
 
       <PatternMenu
+        open={openSections.patterns}
+        onToggle={onToggleSection}
         stamp={stamp}
         selectStamp={selectStamp}
         rotateStamp={rotateStamp}
@@ -171,8 +224,19 @@ export function ControlPanel({
         exportRLE={exportRLE}
       />
 
-      <section>
-        <h2>View</h2>
+      <Section
+        id="view"
+        title="View"
+        open={openSections.view}
+        onToggle={onToggleSection}
+        info={
+          <p>
+            Scroll to zoom about the cursor, shift-drag or middle-drag to pan.
+            Rendering cost tracks the visible area rather than the world size, so
+            zooming in is free. The edges wrap in both directions.
+          </p>
+        }
+      >
         <Slider
           label="Zoom"
           value={toZoomTick(zoom)}
@@ -202,47 +266,77 @@ export function ControlPanel({
             ))}
           </select>
         </label>
-        <p className="hint">Scroll to zoom, shift-drag or middle-drag to pan.</p>
-      </section>
+      </Section>
 
-      <section>
-        <h2>Look</h2>
-        <label className="control">
-          <span className="control-label">Palette</span>
-          <select value={params.paletteId} onChange={(e) => onChange('paletteId', e.target.value)}>
-            {PALETTES.map((palette) => (
-              <option key={palette.id} value={palette.id}>
-                {palette.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Slider
-          label="Age ramp"
-          value={params.ageRate}
-          min={1}
-          max={255}
-          onChange={(v) => onChange('ageRate', v)}
-        />
-        <Slider
-          label="Trail decay"
-          value={params.decayRate}
-          min={1}
-          max={255}
-          format={(v) => (ruleStates > 2 ? 'by rule' : v >= 255 ? 'off' : String(v))}
-          onChange={(v) => onChange('decayRate', v)}
-        />
+      <Section
+        id="look"
+        title="Look"
+        open={openSections.look}
+        onToggle={onToggleSection}
+        info={
+          <>
+            <p>
+              Cells are coloured by how long they have been alive, so stable
+              structures read differently from churn. <strong>Age ramp</strong> is
+              how fast a cell climbs the palette.
+            </p>
+            <p>
+              <strong>Trail decay</strong> is how fast dead cells fade back to the
+              background. Low values leave comet tails behind gliders; at{' '}
+              <em>off</em> the board is crisp black and white.
+            </p>
+          </>
+        }
+      >
+        <div data-tour="look">
+          <label className="control">
+            <span className="control-label">Palette</span>
+            <select value={params.paletteId} onChange={(e) => onChange('paletteId', e.target.value)}>
+              {PALETTES.map((palette) => (
+                <option key={palette.id} value={palette.id}>
+                  {palette.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Slider
+            label="Age ramp"
+            value={params.ageRate}
+            min={1}
+            max={255}
+            onChange={(v) => onChange('ageRate', v)}
+          />
+          <Slider
+            label="Trail decay"
+            value={params.decayRate}
+            min={1}
+            max={255}
+            format={(v) => (ruleStates > 2 ? 'by rule' : v >= 255 ? 'off' : String(v))}
+            onChange={(v) => onChange('decayRate', v)}
+          />
+        </div>
         {ruleStates > 2 && (
           <p className="hint">
             This rule has {ruleStates} states, so its dying cells fade on a
             schedule the rule sets and the trail slider does not apply.
           </p>
         )}
-      </section>
+      </Section>
 
-      <section className="stats">
-        <h2>Stats</h2>
-        <dl>
+      <Section
+        id="stats"
+        title="Stats"
+        open={openSections.stats}
+        onToggle={onToggleSection}
+        info={
+          <p>
+            Counted inside the step loop, so they are free. Births and deaths
+            settling to the same number means the pattern has reached
+            equilibrium.
+          </p>
+        }
+      >
+        <dl className="stats" data-tour="stats">
           <div>
             <dt>Generation</dt>
             <dd>{stats.generation.toLocaleString()}</dd>
@@ -260,7 +354,7 @@ export function ControlPanel({
             <dd>{stats.deaths.toLocaleString()}</dd>
           </div>
         </dl>
-      </section>
+      </Section>
 
       <footer className="hint">
         Drag to draw, alt-drag to erase. <kbd>Space</kbd> play/pause,{' '}

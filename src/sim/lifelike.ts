@@ -36,12 +36,23 @@ const POPCOUNT = new Uint8Array(256)
 for (let m = 1; m < 256; m++) POPCOUNT[m] = POPCOUNT[m >> 1] + (m & 1)
 
 /**
- * Read one `<digit>[-][letters]` group. Returns the index just past it, or -1
- * if the text there is not a valid group.
+ * A parse either yields a rule or a sentence saying why not. The rule field is
+ * the easiest control in the app to mistype, and refusing without a reason
+ * would leave the 51 Hensel classes effectively unguessable.
  */
-function readGroup(text: string, at: number, into: Transitions): number {
+type Parsed = { rule: Rule; error?: undefined } | { rule?: undefined; error: string }
+
+const quoted = (text: string) => `“${text}”`
+
+/**
+ * Read one `<digit>[-][letters]` group into `into`. Returns the index just
+ * past it, or a sentence explaining why the text there is not a group.
+ */
+function readGroup(text: string, at: number, into: Transitions, half: string): number | string {
   const count = text.charCodeAt(at) - 48
-  if (count < 0 || count > 8) return -1
+  if (count < 0 || count > 8) {
+    return `${quoted(text[at])} in the ${half} section is not a neighbour count, which runs 0 to 8.`
+  }
 
   let i = at + 1
   const exclude = text[i] === '-'
@@ -55,10 +66,16 @@ function readGroup(text: string, at: number, into: Transitions): number {
     selected |= 1 << j
   }
 
-  // A bare digit means every class of that count. A dash has to be followed by
-  // something to remove, or the rulestring is half-typed.
+  // Anything that is neither a letter of this count nor the start of the next
+  // group is a typo, and the likeliest typo is a letter borrowed from another
+  // count - so say which letters this count actually has.
+  const stopped = text[i]
+  if (stopped !== undefined && (stopped < '0' || stopped > '8')) {
+    return `${quoted(stopped)} is not a neighbourhood letter for ${count} neighbours, which has ${letters}.`
+  }
+
   if (selected === 0) {
-    if (exclude) return -1
+    if (exclude) return `${quoted(`${count}-`)} needs letters after the dash to exclude.`
     selected = ALL[count]
   } else if (exclude) {
     selected = ALL[count] & ~selected
@@ -68,12 +85,12 @@ function readGroup(text: string, at: number, into: Transitions): number {
   return i
 }
 
-function parseTransitions(text: string): Transitions | null {
+function parseTransitions(text: string, half: string): Transitions | string {
   const out = new Uint16Array(9)
   let i = 0
   while (i < text.length) {
-    const next = readGroup(text, i, out)
-    if (next < 0) return null
+    const next = readGroup(text, i, out, half)
+    if (typeof next === 'string') return next
     i = next
   }
   return out
@@ -99,27 +116,42 @@ function buildTable(born: Transitions, survive: Transitions): Uint8Array {
   return table
 }
 
-export function parseRule(text: string): Rule | null {
+function parse(text: string): Parsed {
   const t = text.replace(/\s+/g, '').toLowerCase()
-  if (t[0] !== 'b') return null
+  if (t === '') return { error: 'Enter a rulestring, like B3/S23.' }
+  if (t[0] !== 'b') return { error: 'A rulestring starts with B, like B3/S23.' }
 
   // No Hensel letter is `s`, so the first one is unambiguously the separator.
   const split = t.indexOf('s')
-  if (split < 0) return null
+  if (split < 0) return { error: 'A rulestring needs an S section too, like B3/S23.' }
 
   let bornText = t.slice(1, split)
   if (bornText.endsWith('/')) bornText = bornText.slice(0, -1)
 
   const rest = t.slice(split + 1).split('/')
-  if (rest.length > 2) return null
+  if (rest.length > 2) {
+    return { error: 'Only one number may follow the S section, giving the state count.' }
+  }
   const states = rest.length === 1 ? 2 : Number(rest[1])
-  if (!Number.isInteger(states) || states < 2 || states > MAX_STATES) return null
+  if (!Number.isInteger(states) || states < 2 || states > MAX_STATES) {
+    return { error: 'The number after the S section is the state count, from 2 to 256.' }
+  }
 
-  const born = parseTransitions(bornText)
-  const survive = parseTransitions(rest[0])
-  if (!born || !survive) return null
+  const born = parseTransitions(bornText, 'B')
+  if (typeof born === 'string') return { error: born }
+  const survive = parseTransitions(rest[0], 'S')
+  if (typeof survive === 'string') return { error: survive }
 
-  return { born, survive, states, table: buildTable(born, survive) }
+  return { rule: { born, survive, states, table: buildTable(born, survive) } }
+}
+
+export function parseRule(text: string): Rule | null {
+  return parse(text).rule ?? null
+}
+
+/** Why the rulestring was rejected, or null when it parses. */
+export function ruleError(text: string): string | null {
+  return parse(text).error ?? null
 }
 
 /** True when the rule ignores arrangement, so it can be written as plain B/S. */
