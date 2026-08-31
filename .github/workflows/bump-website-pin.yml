@@ -1,0 +1,64 @@
+name: Bump website submodule pin
+
+# henrybarthelemy.com vendors this repo as a git submodule, which records one
+# exact commit SHA. Pushing here does not move that pin, so the site would keep
+# deploying stale code until someone bumped it by hand. This does the bump, and
+# the resulting commit on the website repo is what triggers its Netlify deploy.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: bump-website-pin
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the website
+        uses: actions/checkout@v4
+        with:
+          repository: henrybarthelemy/personalwebsite
+          ref: main
+          # GITHUB_TOKEN is scoped to this repo only and cannot push to the
+          # website, so this needs a PAT with contents:write on that repo.
+          token: ${{ secrets.WEBSITE_PUSH_TOKEN }}
+          # The pin is a single index entry, so it can be rewritten without
+          # fetching this repo's contents. That keeps the token scoped to the
+          # website alone and skips a needless clone.
+          submodules: false
+
+      - name: Point the submodule at this commit
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git update-index --add --cacheinfo "160000,$SHA,automata"
+
+          if git diff --cached --quiet; then
+            echo "Pin is already at $SHA; nothing to do."
+            exit 0
+          fi
+
+          git commit -m "Bump automata to ${SHA:0:7}" \
+                     -m "Automated by bump-website-pin in henrybarthelemy/automata."
+
+          # The website may have moved between checkout and push.
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              echo "Pinned automata at $SHA."
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt); rebasing onto latest main."
+            git pull --rebase origin main
+          done
+
+          echo "Could not push after 3 attempts." >&2
+          exit 1
