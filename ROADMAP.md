@@ -11,16 +11,17 @@ Status: **shipped** · **in progress** · **next** · **backlog** · **declined*
 
 ## Shipped
 
-| Item | Commit |
-| --- | --- |
-| Conway core: halo-padded grid, B/S rulestring engine, seeded RNG | `ace295a` |
-| Canvas2D renderer, palettes as lookup tables | `ace295a` |
-| Age-colouring and trail ghosting via the heat buffer | `ace295a` |
-| Draw/erase with Bresenham infill, transport controls, live stats | `ace295a` |
-| Zoom about the cursor, pan, fit, selectable world sizes | `4f5bb07` |
-| Architecture documentation | `3e2fd90` |
-| RLE import/export, pattern library, stamp mode | `29c3c5f` |
-| Vitest suite over the simulation, RLE, view, and palette modules | `7527b90` |
+Deliberately no commit hashes here — they go stale on every rebase, and
+`git log` already records when each of these landed.
+
+- Conway core: halo-padded grid, B/S rulestring engine, seeded RNG
+- Canvas2D renderer, palettes compiled to lookup tables
+- Age-colouring and trail ghosting via the heat buffer
+- Draw and erase with Bresenham infill, transport controls, live stats
+- Zoom about the cursor, pan, fit, selectable world sizes
+- RLE import/export, built-in pattern library, stamp placement
+- Vitest suite over the simulation, RLE, view, and palette modules
+- Architecture and roadmap documentation
 
 ## In progress
 
