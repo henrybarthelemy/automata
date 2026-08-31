@@ -69,6 +69,7 @@ export default function App() {
         running={running}
         setRunning={setRunning}
         ruleValid={sim.ruleValid}
+        ruleStates={sim.ruleStates}
         stats={sim.stats}
         onStep={stepOnce}
         onClear={clear}

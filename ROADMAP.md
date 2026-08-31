@@ -21,6 +21,7 @@ Deliberately no commit hashes here — they go stale on every rebase, and
 - Zoom about the cursor, pan, fit, selectable world sizes
 - RLE import/export, built-in pattern library, stamp placement
 - Vitest suite over the simulation, RLE, view, and palette modules
+- Generations rules (`Bx/Sy/n`) with rule-driven state colouring
 - Architecture and roadmap documentation
 
 ## In progress
@@ -30,18 +31,6 @@ Nothing currently.
 ---
 
 ## Next up
-
-### Generations rules (`B/S/n`)
-
-**Size:** small · **Depends on:** nothing
-
-A multistate generalisation where cells that would die instead decay through
-`n` states. Our heat buffer *already is* a decay state, so the renderer barely
-changes — this is a large visual payoff for a small diff.
-
-- Extend `parseRule()` to accept the third component
-- Cell state becomes the age rather than a flag; step decrements instead of clearing
-- Map state onto the existing palette ramp
 
 ### Isotropic non-totalistic rules (Hensel notation)
 

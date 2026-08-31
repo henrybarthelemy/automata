@@ -61,6 +61,7 @@ export function useSimulation(params: SimParams) {
   const [running, setRunningState] = useState(false)
   const [stats, setStats] = useState<StepStats>(EMPTY_STATS)
   const [ruleValid, setRuleValid] = useState(true)
+  const [ruleStates, setRuleStates] = useState(2)
   const [zoom, setZoomState] = useState(viewRef.current.zoom)
   const [stamp, setStampState] = useState<Pattern | null>(null)
 
@@ -104,7 +105,10 @@ export function useSimulation(params: SimParams) {
   useEffect(() => {
     const parsed = parseRule(params.rule)
     setRuleValid(parsed !== null)
-    if (parsed) ruleRef.current = parsed
+    if (parsed) {
+      ruleRef.current = parsed
+      setRuleStates(parsed.states)
+    }
   }, [params.rule])
 
   useEffect(() => {
@@ -374,6 +378,7 @@ export function useSimulation(params: SimParams) {
     setRunning,
     stats,
     ruleValid,
+    ruleStates,
     zoom,
     stepOnce,
     clear,

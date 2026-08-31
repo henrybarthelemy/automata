@@ -79,6 +79,16 @@ next[i] = (alive ? survive : born) >> n & 1
 Conway is not special-cased anywhere — it is the string `B3/S23`, which is why
 HighLife and Seeds already work by typing them into the rule field.
 
+A third component makes it a **Generations** rule (`Bx/Sy/n`): a cell that
+fails to survive walks down states `2..n-1` before emptying, and while it does
+so it is neither alive nor birthable. The countdown lives in a `dying` array
+kept *separate* from `cells`, so `cells` stays strictly 0/1 and the neighbour
+count remains a raw sum with no comparisons.
+
+`step()` dispatches to one of two loops rather than branching inside a single
+one. Sharing the loop measured ~14% slower on the binary path, and ordinary
+Life is the common case, so the duplication buys back the hot path.
+
 ### The heat buffer
 
 One `Uint8Array` parallel to the cells, carrying a per-cell brightness. On each
@@ -92,6 +102,14 @@ freshly seeded cell never renders as near-background.
 
 Heat only advances on a simulation step, so pausing freezes trails instead of
 draining them.
+
+Under a Generations rule the dying states drive the ramp directly — a fresh
+countdown is bright and fades as it advances — so the feature needed no
+renderer change at all. Living cells are floored at `GENERATIONS_LIVE_FLOOR`,
+well above the band the dying states occupy; without that separation a rule
+like Brian's Brain, where nothing survives long enough for the age ramp to
+climb, renders as a single flat colour. The trail-decay slider does not apply
+in this mode, since the rule governs the fade.
 
 ## Rendering
 

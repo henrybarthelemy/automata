@@ -19,6 +19,7 @@ interface ControlPanelProps {
   running: boolean
   setRunning: (running: boolean) => void
   ruleValid: boolean
+  ruleStates: number
   stats: StepStats
   onStep: () => void
   onClear: () => void
@@ -69,6 +70,7 @@ export function ControlPanel({
   running,
   setRunning,
   ruleValid,
+  ruleStates,
   stats,
   onStep,
   onClear,
@@ -118,7 +120,10 @@ export function ControlPanel({
           />
         </label>
         <p className="hint">
-          B3/S23 is Conway. Try B36/S23 (HighLife) or B2/S (Seeds).
+          B3/S23 is Conway. Try B36/S23 (HighLife) or B2/S (Seeds). Add a third
+          number for Generations, where cells fade through that many states
+          before dying &mdash; B2/S/3 is Brian&rsquo;s Brain, B2/S345/4 is Star
+          Wars.
         </p>
       </section>
 
@@ -217,9 +222,15 @@ export function ControlPanel({
           value={params.decayRate}
           min={1}
           max={255}
-          format={(v) => (v >= 255 ? 'off' : String(v))}
+          format={(v) => (ruleStates > 2 ? 'by rule' : v >= 255 ? 'off' : String(v))}
           onChange={(v) => onChange('decayRate', v)}
         />
+        {ruleStates > 2 && (
+          <p className="hint">
+            This rule has {ruleStates} states, so its dying cells fade on a
+            schedule the rule sets and the trail slider does not apply.
+          </p>
+        )}
       </section>
 
       <section className="stats">

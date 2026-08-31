@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BIRTH_HEAT, World } from './world'
+import { BIRTH_HEAT, GENERATIONS_LIVE_FLOOR, World } from './world'
 import { parseRule } from './lifelike'
 import type { Pattern } from './rle'
 
@@ -81,6 +81,173 @@ describe('Conway rules', () => {
     w.step(seeds, HEAT)
     expect(w.get(1, 1)).toBe(0)
     expect(w.get(2, 1)).toBe(0)
+  })
+})
+
+// In Generations (`Bx/Sy/n`) a cell that fails to survive does not die
+// outright: it walks down states 2..n-1 first. Those dying cells are not
+// alive, so they neither count as neighbours nor can be born into.
+describe('Generations rules', () => {
+  const GEN_LIFE = parseRule('B3/S23/3')!      // Conway, but with one dying state
+  const GEN_LIFE_4 = parseRule('B3/S23/4')!    // two dying states
+  const BRIANS_BRAIN = parseRule('B2/S/3')!
+
+  /** A horizontal blinker, well clear of the edges. */
+  const blinker = () => {
+    const w = new World(9, 9)
+    w.set(3, 4, true)
+    w.set(4, 4, true)
+    w.set(5, 4, true)
+    return w
+  }
+
+  it('sends a cell that fails to survive into the first dying state', () => {
+    const w = blinker()
+    w.step(GEN_LIFE, HEAT)
+    expect(w.state(3, 4)).toBe(2)
+    expect(w.state(5, 4)).toBe(2)
+  })
+
+  it('keeps survivors and births alive as usual', () => {
+    const w = blinker()
+    w.step(GEN_LIFE, HEAT)
+    expect(w.state(4, 4)).toBe(1)   // survived on 2 neighbours
+    expect(w.state(4, 3)).toBe(1)   // born on 3
+    expect(w.state(4, 5)).toBe(1)
+    expect(w.population).toBe(3)
+  })
+
+  // The discriminating case: ordinary Life would flip the blinker back to
+  // horizontal here. Under Generations the two cells it needs are still
+  // counting down, so they cannot be reborn and the blinker decays instead.
+  it('will not revive a cell that is still counting down', () => {
+    const w = blinker()
+    w.step(GEN_LIFE, HEAT)
+    w.step(GEN_LIFE, HEAT)
+    expect(w.state(3, 4)).toBe(0)   // finished dying, not reborn
+    expect(w.state(5, 4)).toBe(0)
+    expect(w.state(4, 4)).toBe(1)
+    expect(w.population).toBe(1)
+  })
+
+  it('does not count dying cells as neighbours', () => {
+    const w = new World(9, 9)
+    w.set(4, 4, true)
+    w.step(GEN_LIFE, HEAT)          // lone cell starts dying
+    expect(w.state(4, 4)).toBe(2)
+    // Three live cells around a dying one would be a birth if it were empty.
+    const probe = new World(9, 9)
+    probe.set(4, 4, true)
+    probe.step(GEN_LIFE, HEAT)
+    probe.set(3, 3, true)
+    probe.set(4, 3, true)
+    probe.set(5, 3, true)
+    probe.step(GEN_LIFE, HEAT)
+    expect(probe.state(4, 4)).toBe(0)   // countdown finished, never reborn
+  })
+
+  it('walks the whole countdown before the cell empties', () => {
+    const w = blinker()
+    w.step(GEN_LIFE_4, HEAT)
+    expect(w.state(3, 4)).toBe(2)
+    w.step(GEN_LIFE_4, HEAT)
+    expect(w.state(3, 4)).toBe(3)
+    w.step(GEN_LIFE_4, HEAT)
+    expect(w.state(3, 4)).toBe(0)
+  })
+
+  it('advances the countdown regardless of the neighbourhood', () => {
+    const crowded = new World(9, 9)
+    crowded.set(4, 4, true)
+    crowded.step(GEN_LIFE_4, HEAT)
+    expect(crowded.state(4, 4)).toBe(2)
+    // Surround it; the countdown must be indifferent to that.
+    for (const [x, y] of [[3, 3], [4, 3], [5, 3], [3, 4], [5, 4]]) {
+      crowded.set(x, y, true)
+    }
+    crowded.step(GEN_LIFE_4, HEAT)
+    expect(crowded.state(4, 4)).toBe(3)
+  })
+
+  it('counts only living cells in the population', () => {
+    const w = blinker()
+    w.step(GEN_LIFE, HEAT)
+    // Three alive, two dying: dying cells are not population.
+    expect(w.population).toBe(3)
+  })
+
+  it("reproduces Brian's Brain on a two-cell seed", () => {
+    // B2/S/3: nothing survives, and a dead cell with exactly two live
+    // neighbours is born. Two adjacent cells therefore spawn four.
+    const w = new World(11, 11)
+    w.set(4, 4, true)
+    w.set(5, 4, true)
+    w.step(BRIANS_BRAIN, HEAT)
+    expect(w.state(4, 4)).toBe(2)
+    expect(w.state(5, 4)).toBe(2)
+    for (const [x, y] of [[4, 3], [5, 3], [4, 5], [5, 5]]) {
+      expect(w.state(x, y), `${x},${y}`).toBe(1)
+    }
+    expect(w.population).toBe(4)
+  })
+
+  it('behaves exactly like Life when the rule has two states', () => {
+    const generations = blinker()
+    const life = blinker()
+    for (let i = 0; i < 6; i++) {
+      generations.step(parseRule('B3/S23/2')!, HEAT)
+      life.step(CONWAY, HEAT)
+    }
+    expect(render(generations)).toEqual(render(life))
+    expect(generations.population).toBe(life.population)
+  })
+
+  // Living and dying cells must land in separate bands of the colour ramp, or
+  // a rule where nothing survives renders as one flat colour.
+  it('keeps living cells brighter than any dying cell', () => {
+    const w = new World(11, 11)
+    w.set(4, 4, true)
+    w.set(5, 4, true)
+    w.step(BRIANS_BRAIN, HEAT)
+
+    const live = w.heat[w.index(4, 3)]
+    const dyingCell = w.heat[w.index(4, 4)]
+    expect(w.state(4, 3)).toBe(1)
+    expect(w.state(4, 4)).toBe(2)
+    expect(live).toBeGreaterThanOrEqual(GENERATIONS_LIVE_FLOOR)
+    expect(live).toBeGreaterThan(dyingCell)
+  })
+
+  it('fades successive dying states downwards', () => {
+    const w = blinker()
+    const seen: number[] = []
+    for (let i = 0; i < 3; i++) {
+      w.step(GEN_LIFE_4, HEAT)
+      if (w.state(3, 4) >= 2) seen.push(w.heat[w.index(3, 4)])
+    }
+    expect(seen.length).toBeGreaterThanOrEqual(2)
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i]).toBeLessThan(seen[i - 1])
+    }
+  })
+
+  it('clears a dying state when the cell is drawn over', () => {
+    const w = blinker()
+    w.step(GEN_LIFE, HEAT)
+    expect(w.state(3, 4)).toBe(2)
+    w.set(3, 4, true)
+    expect(w.state(3, 4)).toBe(1)
+  })
+
+  it('clears dying states on clear and randomize', () => {
+    const w = blinker()
+    w.step(GEN_LIFE, HEAT)
+    w.clear()
+    expect(w.state(3, 4)).toBe(0)
+    w.set(3, 4, true)
+    w.step(GEN_LIFE, HEAT)
+    w.randomize(5, 0.2)
+    expect(w.state(3, 4)).toBeLessThanOrEqual(1)
   })
 })
 
