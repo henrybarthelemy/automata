@@ -72,6 +72,13 @@ export function paletteById(id: string): Palette {
   return PALETTES.find((p) => p.id === id) ?? PALETTES[0]
 }
 
+/** The hottest stop, for UI accents (e.g. the population sparkline) that
+ * should track the current palette without inventing a second colour. */
+export function accentColor(palette: Palette): string {
+  const [r, g, b] = palette.stops[palette.stops.length - 1]
+  return `rgb(${r}, ${g}, ${b})`
+}
+
 /**
  * Expand stops into a 256-entry lookup of packed little-endian RGBA, so the
  * render loop is a single store per cell.

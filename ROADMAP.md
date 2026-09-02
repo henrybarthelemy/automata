@@ -27,6 +27,8 @@ Deliberately no commit hashes here — they go stale on every rebase, and
 - Six-step guided tour, launched from a button rather than on first load
 - Rulestring errors that name the offending character
 - Architecture and roadmap documentation
+- Population sparkline: last 200 generations, sampled per-step so fast
+  playback doesn't under-sample, coloured from the current palette's accent
 
 ## In progress
 
@@ -36,8 +38,7 @@ Nothing currently.
 
 ## Next up
 
-Pick the next item from the backlog below. The population graph is the smallest
-piece of remaining value, and permalinks the most-asked-for.
+Pick the next item from the backlog below.
 
 ---
 
@@ -47,7 +48,6 @@ piece of remaining value, and permalinks the most-asked-for.
 
 | Item | Size | Depends on | Note |
 | --- | --- | --- | --- |
-| Population graph | small | — | Stats already computed free in the step loop; needs a ring buffer and a sparkline canvas |
 | Rule presets | small | — | Named chips (Conway, HighLife, Seeds, Day & Night, Brian's Brain, tlife, Just Friends) filling the rule field; `formatRule()` normalises for match-highlighting, which would finally give it a caller |
 | Warm cold start | small | — | The app opens on an empty paused board; seeding a Gosper gun and playing would change the first impression more than anything else its size |
 | Permalinks | small | — | Seeded RNG already makes boards reproducible from an integer; embed drawn boards as RLE under a size budget |

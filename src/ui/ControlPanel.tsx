@@ -1,9 +1,10 @@
 import { WORLD_PRESETS, type SimParams } from '../state/useSimulation'
 import type { StepStats } from '../sim/world'
-import { PALETTES } from '../render/palettes'
+import { accentColor, paletteById, PALETTES } from '../render/palettes'
 import { MAX_ZOOM, MIN_ZOOM } from '../render/view'
 import { PatternMenu } from './PatternMenu'
 import { Section } from './Section'
+import { Sparkline } from './Sparkline'
 import type { Pattern } from '../sim/rle'
 
 // The useful zoom range spans two orders of magnitude, so the slider is
@@ -23,6 +24,7 @@ interface ControlPanelProps {
   ruleProblem: string | null
   ruleStates: number
   stats: StepStats
+  history: number[]
   onStep: () => void
   onClear: () => void
   onRandomize: () => void
@@ -78,6 +80,7 @@ export function ControlPanel({
   ruleProblem,
   ruleStates,
   stats,
+  history,
   onStep,
   onClear,
   onRandomize,
@@ -332,10 +335,15 @@ export function ControlPanel({
           <p>
             Counted inside the step loop, so they are free. Births and deaths
             settling to the same number means the pattern has reached
-            equilibrium.
+            equilibrium. The trend line tracks population over the last 200
+            generations.
           </p>
         }
       >
+        <div className="control">
+          <span className="control-label">Population, last 200 generations</span>
+          <Sparkline values={history} color={accentColor(paletteById(params.paletteId))} />
+        </div>
         <dl className="stats" data-tour="stats">
           <div>
             <dt>Generation</dt>

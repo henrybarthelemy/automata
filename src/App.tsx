@@ -103,6 +103,7 @@ export default function App() {
         ruleProblem={sim.ruleProblem}
         ruleStates={sim.ruleStates}
         stats={sim.stats}
+        history={sim.history}
         onStep={stepOnce}
         onClear={clear}
         onRandomize={randomize}

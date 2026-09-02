@@ -5,6 +5,7 @@ import { Canvas2DRenderer } from '../render/canvas2d'
 import { parseRLE, serializeRLE, rotatePattern, flipPattern, type Pattern } from '../sim/rle'
 import { paletteById } from '../render/palettes'
 import { clampView, clampZoom, fitView, zoomAbout, type View } from '../render/view'
+import { createHistory } from './history'
 
 export interface SimParams {
   rule: string
@@ -41,6 +42,8 @@ export const DEFAULT_PARAMS: SimParams = {
 const EMPTY_STATS: StepStats = { generation: 0, population: 0, births: 0, deaths: 0 }
 /** Cap catch-up work so a slow frame can't spiral. */
 const MAX_STEPS_PER_FRAME = 8
+/** "Last 200 generations" reads the same regardless of playback speed. */
+const HISTORY_CAPACITY = 200
 
 export function useSimulation(params: SimParams) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -54,12 +57,14 @@ export function useSimulation(params: SimParams) {
   const runningRef = useRef(false)
   const needsDrawRef = useRef(true)
   const statsRef = useRef<StepStats>(EMPTY_STATS)
+  const historyRef = useRef(createHistory(HISTORY_CAPACITY))
   const seedRef = useRef(1)
   const stampRef = useRef<Pattern | null>(null)
   const previewRef = useRef<{ x: number; y: number } | null>(null)
 
   const [running, setRunningState] = useState(false)
   const [stats, setStats] = useState<StepStats>(EMPTY_STATS)
+  const [history, setHistory] = useState<number[]>([])
   const [ruleValid, setRuleValid] = useState(true)
   const [ruleProblem, setRuleProblem] = useState<string | null>(null)
   const [ruleStates, setRuleStates] = useState(2)
@@ -133,8 +138,14 @@ export function useSimulation(params: SimParams) {
     if (!worldRef.current) {
       worldRef.current = new World(worldWidth, worldHeight)
       worldRef.current.randomize(seedRef.current, density)
+      historyRef.current.reset()
+      historyRef.current.push(worldRef.current.population)
     } else {
       worldRef.current.resize(worldWidth, worldHeight)
+      // Resizing preserves generation/population rather than restarting
+      // them (see World.resize), so history keeps flowing through it - a
+      // population jump from clipping is a real data point, not noise.
+      historyRef.current.push(worldRef.current.population)
     }
 
     const measure = () => {
@@ -146,6 +157,7 @@ export function useSimulation(params: SimParams) {
     measure()
     commitView(fitView(worldWidth, worldHeight, sizeRef.current.width, sizeRef.current.height))
     setStats({ ...statsRef.current, population: worldRef.current.population })
+    setHistory(historyRef.current.values())
 
     const observer = new ResizeObserver(() => {
       measure()
@@ -179,6 +191,9 @@ export function useSimulation(params: SimParams) {
         let steps = 0
         while (accumulator >= interval && steps < MAX_STEPS_PER_FRAME) {
           statsRef.current = world.step(ruleRef.current, { ageRate, decayRate })
+          // Sampled once per generation rather than once per flush below, so
+          // a catch-up frame (several steps at once) doesn't under-sample.
+          historyRef.current.push(statsRef.current.population)
           accumulator -= interval
           steps++
         }
@@ -198,6 +213,7 @@ export function useSimulation(params: SimParams) {
       if (now - lastFlush > 100) {
         lastFlush = now
         setStats({ ...statsRef.current, population: world.population })
+        setHistory(historyRef.current.values())
       }
     }
 
@@ -210,14 +226,18 @@ export function useSimulation(params: SimParams) {
     if (!world) return
     const { ageRate, decayRate } = paramsRef.current
     statsRef.current = world.step(ruleRef.current, { ageRate, decayRate })
+    historyRef.current.push(statsRef.current.population)
     setStats(statsRef.current)
+    setHistory(historyRef.current.values())
     drawNow()
   }, [drawNow])
 
   const clear = useCallback(() => {
     worldRef.current?.clear()
     statsRef.current = EMPTY_STATS
+    historyRef.current.reset()
     setStats(EMPTY_STATS)
+    setHistory([])
     drawNow()
   }, [drawNow])
 
@@ -227,7 +247,10 @@ export function useSimulation(params: SimParams) {
     seedRef.current = (Math.random() * 0xffffffff) >>> 0
     world.randomize(seedRef.current, paramsRef.current.density)
     statsRef.current = { ...EMPTY_STATS, population: world.population }
+    historyRef.current.reset()
+    historyRef.current.push(world.population)
     setStats(statsRef.current)
+    setHistory(historyRef.current.values())
     drawNow()
   }, [drawNow])
 
@@ -289,7 +312,9 @@ export function useSimulation(params: SimParams) {
     const world = worldRef.current
     if (!world) return
     statsRef.current = { ...statsRef.current, population: world.population }
+    historyRef.current.push(world.population)
     setStats(statsRef.current)
+    setHistory(historyRef.current.values())
   }, [])
 
   /** Enter or leave stamp mode. Passing null returns to the brush. */
@@ -379,6 +404,7 @@ export function useSimulation(params: SimParams) {
     running,
     setRunning,
     stats,
+    history,
     ruleValid,
     ruleProblem,
     ruleStates,
