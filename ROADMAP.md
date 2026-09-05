@@ -28,7 +28,9 @@ Deliberately no commit hashes here — they go stale on every rebase, and
 - Rulestring errors that name the offending character
 - Architecture and roadmap documentation
 - Population sparkline: last 200 generations, sampled per-step so fast
-  playback doesn't under-sample, coloured from the current palette's accent
+  playback doesn't under-sample, coloured from the current palette's accent,
+  with a labelled population axis and a hover crosshair reading out the
+  generation and population under the pointer
 
 ## In progress
 

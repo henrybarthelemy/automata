@@ -5,7 +5,7 @@ import { Canvas2DRenderer } from '../render/canvas2d'
 import { parseRLE, serializeRLE, rotatePattern, flipPattern, type Pattern } from '../sim/rle'
 import { paletteById } from '../render/palettes'
 import { clampView, clampZoom, fitView, zoomAbout, type View } from '../render/view'
-import { createHistory } from './history'
+import { createHistory, type Sample } from './history'
 
 export interface SimParams {
   rule: string
@@ -64,7 +64,7 @@ export function useSimulation(params: SimParams) {
 
   const [running, setRunningState] = useState(false)
   const [stats, setStats] = useState<StepStats>(EMPTY_STATS)
-  const [history, setHistory] = useState<number[]>([])
+  const [history, setHistory] = useState<Sample[]>([])
   const [ruleValid, setRuleValid] = useState(true)
   const [ruleProblem, setRuleProblem] = useState<string | null>(null)
   const [ruleStates, setRuleStates] = useState(2)
@@ -139,13 +139,19 @@ export function useSimulation(params: SimParams) {
       worldRef.current = new World(worldWidth, worldHeight)
       worldRef.current.randomize(seedRef.current, density)
       historyRef.current.reset()
-      historyRef.current.push(worldRef.current.population)
+      historyRef.current.push({
+        generation: worldRef.current.generation,
+        population: worldRef.current.population,
+      })
     } else {
       worldRef.current.resize(worldWidth, worldHeight)
       // Resizing preserves generation/population rather than restarting
       // them (see World.resize), so history keeps flowing through it - a
       // population jump from clipping is a real data point, not noise.
-      historyRef.current.push(worldRef.current.population)
+      historyRef.current.push({
+        generation: worldRef.current.generation,
+        population: worldRef.current.population,
+      })
     }
 
     const measure = () => {
@@ -193,7 +199,10 @@ export function useSimulation(params: SimParams) {
           statsRef.current = world.step(ruleRef.current, { ageRate, decayRate })
           // Sampled once per generation rather than once per flush below, so
           // a catch-up frame (several steps at once) doesn't under-sample.
-          historyRef.current.push(statsRef.current.population)
+          historyRef.current.push({
+            generation: statsRef.current.generation,
+            population: statsRef.current.population,
+          })
           accumulator -= interval
           steps++
         }
@@ -226,7 +235,10 @@ export function useSimulation(params: SimParams) {
     if (!world) return
     const { ageRate, decayRate } = paramsRef.current
     statsRef.current = world.step(ruleRef.current, { ageRate, decayRate })
-    historyRef.current.push(statsRef.current.population)
+    historyRef.current.push({
+      generation: statsRef.current.generation,
+      population: statsRef.current.population,
+    })
     setStats(statsRef.current)
     setHistory(historyRef.current.values())
     drawNow()
@@ -248,7 +260,7 @@ export function useSimulation(params: SimParams) {
     world.randomize(seedRef.current, paramsRef.current.density)
     statsRef.current = { ...EMPTY_STATS, population: world.population }
     historyRef.current.reset()
-    historyRef.current.push(world.population)
+    historyRef.current.push({ generation: world.generation, population: world.population })
     setStats(statsRef.current)
     setHistory(historyRef.current.values())
     drawNow()
@@ -312,7 +324,7 @@ export function useSimulation(params: SimParams) {
     const world = worldRef.current
     if (!world) return
     statsRef.current = { ...statsRef.current, population: world.population }
-    historyRef.current.push(world.population)
+    historyRef.current.push({ generation: world.generation, population: world.population })
     setStats(statsRef.current)
     setHistory(historyRef.current.values())
   }, [])

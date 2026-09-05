@@ -139,6 +139,12 @@ button.primary:hover {
   color: #ff6b6b;
 }
 
+/* The sparkline's idle hint sits where its hover readout goes, so it uses the
+   value slot without claiming a value's emphasis. */
+.control-label em.muted {
+  color: var(--muted);
+}
+
 input[type='range'] {
   width: 100%;
   accent-color: var(--accent);

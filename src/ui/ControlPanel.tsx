@@ -6,6 +6,7 @@ import { PatternMenu } from './PatternMenu'
 import { Section } from './Section'
 import { Sparkline } from './Sparkline'
 import type { Pattern } from '../sim/rle'
+import type { Sample } from '../state/history'
 
 // The useful zoom range spans two orders of magnitude, so the slider is
 // geometric: every notch is the same proportional change.
@@ -24,7 +25,7 @@ interface ControlPanelProps {
   ruleProblem: string | null
   ruleStates: number
   stats: StepStats
-  history: number[]
+  history: Sample[]
   onStep: () => void
   onClear: () => void
   onRandomize: () => void
@@ -336,13 +337,20 @@ export function ControlPanel({
             Counted inside the step loop, so they are free. Births and deaths
             settling to the same number means the pattern has reached
             equilibrium. The trend line tracks population over the last 200
-            generations.
+            generations, labelled with its own high and low &mdash; the line is
+            normalised to whatever range is in view, so the scale moves with
+            it. Hover the line to read the generation and population under the
+            pointer.
           </p>
         }
       >
         <div className="control">
-          <span className="control-label">Population, last 200 generations</span>
-          <Sparkline values={history} color={accentColor(paletteById(params.paletteId))} />
+          <Sparkline
+            samples={history}
+            color={accentColor(paletteById(params.paletteId))}
+            label="Population"
+            hint="last 200 generations"
+          />
         </div>
         <dl className="stats" data-tour="stats">
           <div>
