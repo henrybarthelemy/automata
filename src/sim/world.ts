@@ -1,6 +1,7 @@
 import { mulberry32 } from './rng'
 import type { Rule } from './lifelike'
 import type { Pattern } from './rle'
+import { effectiveTopology, type TopologyId } from './topology'
 
 export interface StepStats {
   generation: number
@@ -28,12 +29,17 @@ export interface HeatParams {
 }
 
 /**
- * A toroidal grid of binary cells.
+ * A wrapping grid of binary cells.
  *
  * The cell arrays carry a one-cell halo border: index (x, y) lives at
  * (y + 1) * stride + (x + 1). Before each step the halo is filled from the
- * opposite edges, which lets the inner loop count neighbours with constant
+ * far edges, which lets the inner loop count neighbours with constant
  * flat-index offsets — no modulo and no bounds checks in the hot path.
+ *
+ * Because every edge crossing is resolved when that halo is filled, the
+ * surface the grid lives on is entirely a property of `wrapEdges`. A Klein
+ * bottle differs from a torus only in which cell each border position copies;
+ * the step loop below is identical for all of them. See `topology.ts`.
  */
 export class World {
   width: number
@@ -52,10 +58,13 @@ export class World {
   heat: Uint8Array
   generation = 0
   population = 0
+  /** Which surface the edges glue into. Only `wrapEdges` reads this. */
+  topology: TopologyId
 
-  constructor(width: number, height: number) {
+  constructor(width: number, height: number, topology: string = 'torus') {
     this.width = width
     this.height = height
+    this.topology = effectiveTopology(topology, width, height)
     this.stride = width + 2
     const size = this.stride * (height + 2)
     this.cells = new Uint8Array(size)
@@ -236,18 +245,144 @@ export class World {
     }
     this.population = population
     this.generation = generation
+    // A sphere needs a square world, so a resize can invalidate the choice.
+    this.setTopology(this.topology)
   }
 
-  /** Mirror the outer edges into the halo so neighbour reads wrap. */
-  private wrapEdges(): void {
+  setTopology(topology: string): void {
+    this.topology = effectiveTopology(topology, this.width, this.height)
+  }
+
+  /**
+   * Copy the far edges into the halo so neighbour reads wrap correctly for the
+   * current surface. Public because it is also what the renderer needs before
+   * it can draw what lies across an edge.
+   *
+   * Every fill reads only interior cells and writes only halo cells, so none
+   * of them alias. All are O(w + h) against the step's O(w * h), so branching
+   * on the topology once per step costs nothing measurable.
+   */
+  wrapEdges(): void {
+    switch (this.topology) {
+      case 'plane':
+        return this.clearHalo()
+      case 'klein':
+        return this.wrapKlein()
+      case 'klein-h':
+        return this.wrapKleinFlipped()
+      case 'cross-surface':
+        return this.wrapCrossSurface()
+      case 'sphere':
+        return this.wrapSphere()
+      default:
+        return this.wrapTorus()
+    }
+  }
+
+  /** Opposite edges joined directly. */
+  private wrapTorus(): void {
     const { cells, stride, width: w, height: h } = this
     cells.copyWithin(1, h * stride + 1, h * stride + 1 + w)
     cells.copyWithin((h + 1) * stride + 1, stride + 1, stride + 1 + w)
+    // The corners fall out for free: the halo row ends were filled above.
     for (let y = 0; y <= h + 1; y++) {
       const row = y * stride
       cells[row] = cells[row + w]
       cells[row + w + 1] = cells[row + 1]
     }
+  }
+
+  /**
+   * No wrapping: the border stays dead. Cleared every step rather than once on
+   * switching topology, so stale values from another surface cannot survive.
+   */
+  private clearHalo(): void {
+    const { cells, stride, width: w, height: h } = this
+    cells.fill(0, 0, stride)
+    cells.fill(0, (h + 1) * stride, (h + 2) * stride)
+    for (let y = 1; y <= h; y++) {
+      cells[y * stride] = 0
+      cells[y * stride + w + 1] = 0
+    }
+  }
+
+  /** Klein bottle: left and right reversed, top and bottom plain. */
+  private wrapKlein(): void {
+    const { cells, stride, width: w, height: h } = this
+    cells.copyWithin(1, h * stride + 1, h * stride + 1 + w)
+    cells.copyWithin((h + 1) * stride + 1, stride + 1, stride + 1 + w)
+    for (let y = 0; y < h; y++) {
+      const row = (y + 1) * stride
+      const mirror = (h - y) * stride // the row holding y' = h - 1 - y
+      cells[row] = cells[mirror + w]
+      cells[row + w + 1] = cells[mirror + 1]
+    }
+    // Corners cross both seams, so they cannot be read off the halo.
+    cells[0] = cells[stride + w]
+    cells[w + 1] = cells[stride + 1]
+    cells[(h + 1) * stride] = cells[h * stride + w]
+    cells[(h + 1) * stride + w + 1] = cells[h * stride + 1]
+  }
+
+  /** The same surface a quarter turn round: top and bottom reversed. */
+  private wrapKleinFlipped(): void {
+    const { cells, stride, width: w, height: h } = this
+    for (let x = 0; x < w; x++) {
+      const mirror = w - x // the column holding x' = w - 1 - x
+      cells[x + 1] = cells[h * stride + mirror]
+      cells[(h + 1) * stride + x + 1] = cells[stride + mirror]
+    }
+    for (let y = 0; y < h; y++) {
+      const row = (y + 1) * stride
+      cells[row] = cells[row + w]
+      cells[row + w + 1] = cells[row + 1]
+    }
+    cells[0] = cells[h * stride + 1]
+    cells[w + 1] = cells[h * stride + w]
+    cells[(h + 1) * stride] = cells[stride + 1]
+    cells[(h + 1) * stride + w + 1] = cells[stride + w]
+  }
+
+  /** Cross-surface: both pairs reversed. */
+  private wrapCrossSurface(): void {
+    const { cells, stride, width: w, height: h } = this
+    for (let x = 0; x < w; x++) {
+      const mirror = w - x
+      cells[x + 1] = cells[h * stride + mirror]
+      cells[(h + 1) * stride + x + 1] = cells[stride + mirror]
+    }
+    for (let y = 0; y < h; y++) {
+      const row = (y + 1) * stride
+      const mirror = (h - y) * stride
+      cells[row] = cells[mirror + w]
+      cells[row + w + 1] = cells[mirror + 1]
+    }
+    // Both flips land a corner back on itself, so each corner cell is its own
+    // diagonal neighbour. Golly calls this out as the surface's oddity.
+    cells[0] = cells[stride + 1]
+    cells[w + 1] = cells[stride + w]
+    cells[(h + 1) * stride] = cells[h * stride + 1]
+    cells[(h + 1) * stride + w + 1] = cells[h * stride + w]
+  }
+
+  /**
+   * Sphere: adjacent edges joined, top to left and right to bottom, which is a
+   * reflection in the leading diagonal. Square worlds only, enforced by
+   * `effectiveTopology`.
+   */
+  private wrapSphere(): void {
+    const { cells, stride, width: w, height: h } = this
+    for (let i = 0; i < w; i++) {
+      const row = (i + 1) * stride
+      cells[row] = cells[stride + i + 1] // left border  <- top edge
+      cells[i + 1] = cells[row + 1] // top border   <- left edge
+      cells[row + w + 1] = cells[h * stride + i + 1] // right border <- bottom edge
+      cells[(h + 1) * stride + i + 1] = cells[row + w] // bottom border <- right edge
+    }
+    cells[0] = cells[stride + 1]
+    cells[w + 1] = cells[stride + w]
+    cells[(h + 1) * stride] = cells[h * stride + 1]
+    cells[(h + 1) * stride + w + 1] = cells[h * stride + w]
   }
 
   step(rule: Rule, heatParams: HeatParams): StepStats {

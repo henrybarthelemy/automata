@@ -31,6 +31,8 @@ Deliberately no commit hashes here — they go stale on every rebase, and
   playback doesn't under-sample, coloured from the current palette's accent,
   with a labelled population axis and a hover crosshair reading out the
   generation and population under the pointer
+- Grid topologies: torus, Klein bottle (either axis), cross-surface, sphere and
+  plane, following Golly's bounded-grid conventions, selectable while running
 
 ## In progress
 
@@ -40,7 +42,19 @@ Nothing currently.
 
 ## Next up
 
-Pick the next item from the backlog below.
+**Draw the topology.** Stage 1 shipped the wrapping; a Klein bottle and a torus
+still render identically, so the surface is invisible until a glider happens to
+cross a seam. Two annotations fix that, both renderer-only:
+
+- Edge identification arrows on the viewport border — the fundamental-polygon
+  notation, where same-direction arrows mean a plain join and opposed arrows
+  mean a twist. Doubles as a legend for the surface dropdown.
+- A dimmed ghost band outside the play area showing what lies across each edge.
+  `wrapEdges()` already computes exactly this and then never draws it; the
+  halo is one cell wide, so a legible band means applying `wrapPoint()` over a
+  wider strip.
+
+After that, pick from the backlog below.
 
 ---
 
@@ -60,7 +74,6 @@ Pick the next item from the backlog below.
 
 | Item | Size | Depends on | Note |
 | --- | --- | --- | --- |
-| Grid topologies (Klein bottle, cross-surface, sphere) | small | — | `wrapEdges()` is the single point of change — the halo design makes topology a property of how the border is filled |
 | Step back / rewind | medium | — | Snapshot every Nth generation and replay forward to scrub |
 | Selection: copy/paste/rotate/flip | medium | — | Rotate/flip already exist for stamps; this extends them to a selected region |
 | Pattern identification | medium | — | Hash the board to detect still lifes, oscillator periods, spaceship displacement. Cheap relative to how delightful it is — "that's a period-15 oscillator" |
@@ -133,6 +146,10 @@ verify it by driving the running app and say so explicitly in the commit.
   plain Node with no jsdom. Their placement maths is tested via `coachmark.ts`;
   the rest was verified by driving the app.
 - No persistence — reloading loses the board. Addressed by permalinks.
+- The topology is invisible until something crosses a seam — see "Next up".
+- Stamps, the brush and RLE import still clip at the edges rather than wrapping
+  through the topology. Consistent with how they behaved on a torus, but on a
+  Klein bottle "clipped" is a stranger thing to mean.
 - Drawing while running races the simulation. Edits land between steps, which is
   usually what you want, but it isn't transactional.
 

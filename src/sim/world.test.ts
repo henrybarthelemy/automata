@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BIRTH_HEAT, GENERATIONS_LIVE_FLOOR, World } from './world'
 import { parseRule } from './lifelike'
 import type { Pattern } from './rle'
+import { TOPOLOGIES, wrapPoint, type TopologyId } from './topology'
 
 const CONWAY = parseRule('B3/S23')!
 const HEAT = { ageRate: 28, decayRate: 18 }
@@ -687,4 +688,124 @@ describe('toPattern', () => {
   function glider(): Pattern {
     return { width: 3, height: 3, cells: new Uint8Array([0, 1, 0, 0, 0, 1, 1, 1, 1]) }
   }
+})
+
+describe('grid topologies', () => {
+  const GLIDER: Pattern = {
+    width: 3,
+    height: 3,
+    // Travels down and to the right, one cell diagonally every 4 generations.
+    cells: new Uint8Array([0, 1, 0, 0, 0, 1, 1, 1, 1]),
+  }
+
+  /**
+   * `wrapEdges` fills the halo with flat-index copies for speed; `wrapPoint`
+   * states the same gluing as coordinate arithmetic. Checking the fast path
+   * against the specification at every halo cell is what makes the index
+   * juggling in each fill trustworthy.
+   */
+  function expectHaloMatchesSpec(topology: TopologyId, width: number, height: number) {
+    for (const seed of [1, 7, 99]) {
+      const w = new World(width, height, topology)
+      w.randomize(seed, 0.4)
+      w.wrapEdges()
+      for (let y = -1; y <= height; y++) {
+        for (let x = -1; x <= width; x++) {
+          if (x >= 0 && x < width && y >= 0 && y < height) continue
+          const source = wrapPoint(topology, x, y, width, height)
+          const expected = source ? w.get(source.x, source.y) : 0
+          expect(w.cells[w.index(x, y)], `${topology} seed ${seed} halo (${x}, ${y})`).toBe(expected)
+        }
+      }
+    }
+  }
+
+  it('fills the halo exactly as the topology specifies', () => {
+    for (const topology of TOPOLOGIES) {
+      const [width, height] = topology.requiresSquare ? [11, 11] : [13, 9]
+      expectHaloMatchesSpec(topology.id, width, height)
+    }
+  })
+
+  function centroidY(w: World): number {
+    let sum = 0
+    let n = 0
+    for (let y = 0; y < w.height; y++) {
+      for (let x = 0; x < w.width; x++) {
+        if (w.get(x, y)) {
+          sum += y
+          n++
+        }
+      }
+    }
+    expect(n, 'a glider should stay five cells').toBe(5)
+    return sum / n
+  }
+
+  /** How far the glider moves vertically over exactly one of its periods. */
+  function driftOverPeriod(w: World, until: number): number {
+    while (w.generation < until) step(w)
+    const before = centroidY(w)
+    step(w, 4)
+    return centroidY(w) - before
+  }
+
+  it('reverses a glider vertically when it crosses a Klein bottle seam', () => {
+    // The left and right edges are joined with a half turn, so a glider that
+    // leaves heading down-right comes back heading up-right. Placed 10 cells
+    // from the right edge, it reaches the seam around generation 40.
+    const w = new World(40, 40, 'klein')
+    w.stamp(GLIDER, 30, 4)
+
+    expect(driftOverPeriod(w, 8), 'heading down before the seam').toBeCloseTo(1)
+    expect(driftOverPeriod(w, 60), 'heading up after the seam').toBeCloseTo(-1)
+  })
+
+  it('leaves a glider heading the same way on a torus', () => {
+    // The control for the test above: same glider, same generations, no twist.
+    const w = new World(40, 40, 'torus')
+    w.stamp(GLIDER, 30, 4)
+
+    expect(driftOverPeriod(w, 8)).toBeCloseTo(1)
+    expect(driftOverPeriod(w, 60)).toBeCloseTo(1)
+  })
+
+  it('stops a glider dead against the walls of a plane', () => {
+    // Nothing can translate forever inside a bounded box with dead edges, so
+    // whatever is left has to be still or oscillating, not moving.
+    const w = new World(20, 20, 'plane')
+    w.stamp(GLIDER, 2, 2)
+    step(w, 300)
+    const settled = render(w)
+    step(w, 2)
+    expect(render(w)).toEqual(settled)
+  })
+
+  it('keeps the halo dead on a plane', () => {
+    const w = new World(6, 6, 'plane')
+    for (let i = 0; i < 6; i++) {
+      w.set(i, 0, true)
+      w.set(i, 5, true)
+      w.set(0, i, true)
+      w.set(5, i, true)
+    }
+    w.wrapEdges()
+    for (let y = -1; y <= 6; y++) {
+      for (let x = -1; x <= 6; x++) {
+        if (x >= 0 && x < 6 && y >= 0 && y < 6) continue
+        expect(w.cells[w.index(x, y)], `halo (${x}, ${y})`).toBe(0)
+      }
+    }
+  })
+
+  it('refuses a sphere on a world that is not square', () => {
+    expect(new World(11, 11, 'sphere').topology).toBe('sphere')
+    expect(new World(13, 9, 'sphere').topology).toBe('torus')
+  })
+
+  it('drops back to a torus when a resize breaks a sphere', () => {
+    const w = new World(11, 11, 'sphere')
+    w.resize(13, 9)
+    expect(w.topology).toBe('torus')
+  })
 })

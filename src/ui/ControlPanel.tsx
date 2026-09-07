@@ -2,6 +2,7 @@ import { WORLD_PRESETS, type SimParams } from '../state/useSimulation'
 import type { StepStats } from '../sim/world'
 import { accentColor, paletteById, PALETTES } from '../render/palettes'
 import { MAX_ZOOM, MIN_ZOOM } from '../render/view'
+import { TOPOLOGIES, topologyById } from '../sim/topology'
 import { PatternMenu } from './PatternMenu'
 import { Section } from './Section'
 import { Sparkline } from './Sparkline'
@@ -234,11 +235,23 @@ export function ControlPanel({
         open={openSections.view}
         onToggle={onToggleSection}
         info={
-          <p>
-            Scroll to zoom about the cursor, shift-drag or middle-drag to pan.
-            Rendering cost tracks the visible area rather than the world size, so
-            zooming in is free. The edges wrap in both directions.
-          </p>
+          <>
+            <p>
+              Scroll to zoom about the cursor, shift-drag or middle-drag to pan.
+              Rendering cost tracks the visible area rather than the world size,
+              so zooming in is free.
+            </p>
+            <p>
+              <strong>Surface</strong> chooses how the four edges are glued
+              together. On a <em>torus</em> each edge meets the one opposite it.
+              A <em>Klein bottle</em> joins one pair with a half turn, so a
+              glider crossing that seam comes back mirrored and travelling the
+              other way; a <em>cross-surface</em> twists both pairs. A{' '}
+              <em>sphere</em> joins adjacent edges instead, which only closes up
+              on a square world. On a <em>plane</em> nothing wraps and patterns
+              die against the border.
+            </p>
+          </>
         }
       >
         <Slider
@@ -251,6 +264,26 @@ export function ControlPanel({
         />
         <button onClick={onFit}>Fit world</button>
         <label className="control">
+          <span className="control-label">Surface</span>
+          <select
+            value={params.topology}
+            onChange={(event) => onChange('topology', topologyById(event.target.value).id)}
+          >
+            {TOPOLOGIES.map((topology) => (
+              <option
+                key={topology.id}
+                value={topology.id}
+                // Adjacent edges can only be glued when they are the same
+                // length, so a sphere is unreachable on an oblong world.
+                disabled={topology.requiresSquare && params.worldWidth !== params.worldHeight}
+              >
+                {topology.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="hint">{topologyById(params.topology).blurb}</p>
+        <label className="control">
           <span className="control-label">World size</span>
           <select
             value={`${params.worldWidth}x${params.worldHeight}`}
@@ -261,6 +294,11 @@ export function ControlPanel({
               if (!preset) return
               onChange('worldWidth', preset.width)
               onChange('worldHeight', preset.height)
+              // Leaving a sphere selected on an oblong world would show a
+              // choice the simulation has quietly dropped back to a torus.
+              if (topologyById(params.topology).requiresSquare && preset.width !== preset.height) {
+                onChange('topology', 'torus')
+              }
             }}
           >
             {WORLD_PRESETS.map((preset) => (

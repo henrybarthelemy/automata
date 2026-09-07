@@ -59,9 +59,40 @@ n = cells[up - 1] + cells[up] + cells[up + 1]
 ```
 
 This is the single most important performance decision in the codebase. It is
-also why the grid is toroidal — wrapping is a property of how the halo is
-filled, not a branch in the inner loop. A different topology would change
-`wrapEdges()` and nothing else.
+also why the grid can wrap at all — wrapping is a property of how the halo is
+filled, not a branch in the inner loop.
+
+### Grid topologies
+
+That last point is what `src/sim/topology.ts` cashes in. The world is always a
+rectangle; which *surface* it lives on is only a statement about how the four
+edges are glued, and so it is entirely a statement about which cell each halo
+position copies. A Klein bottle differs from a torus in `wrapEdges()` and
+nowhere else — the step loop, the renderer and the view are untouched.
+
+Six surfaces ship, following Golly's bounded-grid conventions (`:T`, `:K`,
+`:K*`, `:C`, `:S`, `:P`) so patterns and expectations carry over from the
+reference implementation:
+
+| Surface | Edges |
+| --- | --- |
+| Torus | Opposite edges joined directly |
+| Klein bottle | Left and right joined with a half turn |
+| Klein bottle (flipped) | The same surface with top and bottom as the reversed pair |
+| Cross-surface | Both pairs reversed; every corner is its own diagonal neighbour |
+| Sphere | Adjacent edges joined, top to left and right to bottom. Square worlds only |
+| Plane | No wrapping; the border stays dead |
+
+`wrapEdges()` dispatches once per step to a fill written in flat indices, which
+is fast but easy to get subtly wrong. So the same gluing is stated a second
+time as coordinate arithmetic in `wrapPoint()`, and the tests check the fast
+fill against that specification at every cell of the halo ring. `wrapPoint()`
+is the readable definition; the fills are the optimisation.
+
+A sphere joins edges of the same length, so it needs `width === height`.
+`effectiveTopology()` drops it back to a torus rather than let a resize leave
+the simulation unrunnable, and the panel disables the option so the fallback is
+never what the user actually sees.
 
 The cost is that **every index must be translated**: cell `(x, y)` lives at
 `(y + 1) * stride + (x + 1)`, via `World.index()`. Code that walks the arrays
@@ -314,7 +345,7 @@ What is covered:
 
 | Area | Focus |
 | --- | --- |
-| `sim/world` | Conway correctness against known patterns, toroidal wrapping including corners, step statistics, heat ramp and decay, brush and drag painting, seeded randomisation, resize, stamp clipping, bounding-box extraction |
+| `sim/world` | Conway correctness against known patterns, toroidal wrapping including corners, every topology's halo against `wrapPoint`, step statistics, heat ramp and decay, brush and drag painting, seeded randomisation, resize, stamp clipping, bounding-box extraction |
 | `sim/lifelike` | Rulestring parsing, normalisation, rejection of half-typed input, and the wording of the rejection |
 | `sim/hensel` | The 51 isotropic classes, recomputed from the symmetry group and compared against the table |
 | `ui/coachmark` | Tour-card placement: preferred side, flipping, centring, and staying inside the window |
@@ -390,6 +421,7 @@ worked around.
 - `formatRule()` in `src/sim/lifelike.ts` has no callers — it exists for a
   future rule-preset UI. Remove it if that never arrives.
 - No persistence. Reloading loses the board; URL-encoded state is planned.
-- The world is toroidal with no option for a bounded or infinite grid.
+- The grid is finite. Six topologies are selectable, but there is no infinite
+  or growing grid, and no hexagonal or triangular tiling.
 - Drawing while running races the simulation — edits land between steps, which
   is usually what you want but is not transactional.

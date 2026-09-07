@@ -6,6 +6,7 @@ import { parseRLE, serializeRLE, rotatePattern, flipPattern, type Pattern } from
 import { paletteById } from '../render/palettes'
 import { clampView, clampZoom, fitView, zoomAbout, type View } from '../render/view'
 import { createHistory, type Sample } from './history'
+import type { TopologyId } from '../sim/topology'
 
 export interface SimParams {
   rule: string
@@ -14,6 +15,8 @@ export interface SimParams {
   ageRate: number
   decayRate: number
   paletteId: string
+  /** Which surface the grid's edges glue into. */
+  topology: TopologyId
   density: number
   brush: number
   worldWidth: number
@@ -25,6 +28,8 @@ export const WORLD_PRESETS = [
   { id: 'medium', name: 'Medium (400 x 300)', width: 400, height: 300 },
   { id: 'large', name: 'Large (800 x 600)', width: 800, height: 600 },
   { id: 'huge', name: 'Huge (1600 x 1200)', width: 1600, height: 1200 },
+  // Square, so the sphere topology has somewhere to live.
+  { id: 'square', name: 'Square (400 x 400)', width: 400, height: 400 },
 ]
 
 export const DEFAULT_PARAMS: SimParams = {
@@ -33,6 +38,7 @@ export const DEFAULT_PARAMS: SimParams = {
   ageRate: 28,
   decayRate: 18,
   paletteId: 'ember',
+  topology: 'torus',
   density: 0.28,
   brush: 2,
   worldWidth: 400,
@@ -136,7 +142,7 @@ export function useSimulation(params: SimParams) {
 
     const { worldWidth, worldHeight, density } = paramsRef.current
     if (!worldRef.current) {
-      worldRef.current = new World(worldWidth, worldHeight)
+      worldRef.current = new World(worldWidth, worldHeight, paramsRef.current.topology)
       worldRef.current.randomize(seedRef.current, density)
       historyRef.current.reset()
       historyRef.current.push({
@@ -172,6 +178,14 @@ export function useSimulation(params: SimParams) {
     observer.observe(container)
     return () => observer.disconnect()
   }, [params.worldWidth, params.worldHeight, commitView])
+
+  // Depends on the world size too: `World.resize` drops a sphere back to a
+  // torus when the world stops being square, so the choice has to be reapplied
+  // once a resize makes it legal again. The size effect above is declared
+  // first, so it has already run by the time this does.
+  useEffect(() => {
+    worldRef.current?.setTopology(params.topology)
+  }, [params.topology, params.worldWidth, params.worldHeight])
 
   // The loop. Fixed timestep, decoupled from render; React state is never
   // touched per tick.
