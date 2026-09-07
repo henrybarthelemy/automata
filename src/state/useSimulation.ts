@@ -5,6 +5,7 @@ import { Canvas2DRenderer } from '../render/canvas2d'
 import { parseRLE, serializeRLE, rotatePattern, flipPattern, type Pattern } from '../sim/rle'
 import { paletteById } from '../render/palettes'
 import { clampView, clampZoom, fitView, zoomAbout, type View } from '../render/view'
+import { SEAM_BAND } from '../render/seams'
 import { createHistory, type Sample } from './history'
 import type { TopologyId } from '../sim/topology'
 
@@ -17,6 +18,8 @@ export interface SimParams {
   paletteId: string
   /** Which surface the grid's edges glue into. */
   topology: TopologyId
+  /** Annotate the edges with arrows and a band of what lies across them. */
+  showSeams: boolean
   density: number
   brush: number
   worldWidth: number
@@ -39,6 +42,7 @@ export const DEFAULT_PARAMS: SimParams = {
   decayRate: 18,
   paletteId: 'ember',
   topology: 'torus',
+  showSeams: true,
   density: 0.28,
   brush: 2,
   worldWidth: 400,
@@ -105,7 +109,7 @@ export function useSimulation(params: SimParams) {
       const world = worldRef.current
       if (!world) return
       const { width, height } = sizeRef.current
-      viewRef.current = clampView(next, world.width, world.height, width, height)
+      viewRef.current = clampView(next, world.width, world.height, width, height, SEAM_BAND)
       setZoomState(viewRef.current.zoom)
       drawNow()
     },
@@ -129,6 +133,11 @@ export function useSimulation(params: SimParams) {
     drawNow()
   }, [params.paletteId, drawNow])
 
+  useEffect(() => {
+    rendererRef.current?.setShowSeams(params.showSeams)
+    drawNow()
+  }, [params.showSeams, drawNow])
+
   // Create the world at its chosen size and fit the view to it. The world no
   // longer tracks the window: resizing just shows more or less of it.
   useEffect(() => {
@@ -138,6 +147,7 @@ export function useSimulation(params: SimParams) {
 
     if (!rendererRef.current) {
       rendererRef.current = new Canvas2DRenderer(canvas, paletteById(paramsRef.current.paletteId))
+      rendererRef.current.setShowSeams(paramsRef.current.showSeams)
     }
 
     const { worldWidth, worldHeight, density } = paramsRef.current
@@ -167,7 +177,9 @@ export function useSimulation(params: SimParams) {
     }
 
     measure()
-    commitView(fitView(worldWidth, worldHeight, sizeRef.current.width, sizeRef.current.height))
+    commitView(
+      fitView(worldWidth, worldHeight, sizeRef.current.width, sizeRef.current.height, SEAM_BAND),
+    )
     setStats({ ...statsRef.current, population: worldRef.current.population })
     setHistory(historyRef.current.values())
 
@@ -421,7 +433,7 @@ export function useSimulation(params: SimParams) {
     const world = worldRef.current
     if (!world) return
     const { width, height } = sizeRef.current
-    commitView(fitView(world.width, world.height, width, height))
+    commitView(fitView(world.width, world.height, width, height, SEAM_BAND))
   }, [commitView])
 
   return {

@@ -92,13 +92,17 @@ const mod = (a: number, n: number) => ((a % n) + n) % n
 
 /**
  * Where a coordinate outside the world lands once the edges are glued, or
- * null on a plane, where outside is simply dead.
+ * null where nothing lies across.
  *
  * This is the specification of the halo: `World.wrapEdges` fills the border
  * ring with flat-index copies for speed, and `world.test.ts` checks that fast
- * path against this function at every halo cell. Defined for the one-cell ring
- * the halo needs; the sphere case in particular does not generalise further
- * out, because adjacent-edge gluing is not a translation.
+ * path against this function at every halo cell.
+ *
+ * It also answers the same question further out, which is what lets the
+ * renderer draw a band of the neighbouring surface outside each edge. The four
+ * twisting surfaces are quotients of the plane by a group, so their formulas
+ * already hold at any distance. A sphere is not, and its diagonal regions have
+ * no sensible continuation past the first ring — those return null.
  */
 export function wrapPoint(
   topology: TopologyId,
@@ -142,15 +146,22 @@ export function wrapPoint(
 
     case 'sphere': {
       // Top glues to left and right glues to bottom, which is a reflection in
-      // the leading diagonal. The four corners read their own corner cell.
-      if (x < 0 && y < 0) return { x: 0, y: 0 }
-      if (x >= w && y < 0) return { x: w - 1, y: 0 }
-      if (x < 0 && y >= h) return { x: 0, y: h - 1 }
-      if (x >= w && y >= h) return { x: w - 1, y: h - 1 }
-      if (x < 0) return { x: y, y: 0 }
-      if (y < 0) return { x: 0, y: x }
-      if (x >= w) return { x: y, y: h - 1 }
-      return { x: w - 1, y: x }
+      // the leading diagonal. Stepping further out past an edge carries on
+      // into the partner edge, so depth away from one edge becomes distance
+      // along the other.
+      const depthX = x < 0 ? -x : x >= w ? x - w + 1 : 0
+      const depthY = y < 0 ? -y : y >= h ? y - h + 1 : 0
+
+      if (depthX && depthY) {
+        // Diagonally outside. Only the halo's own ring is defined, where each
+        // corner simply reads itself; beyond that the gluing runs out.
+        if (depthX > 1 || depthY > 1) return null
+        return { x: x < 0 ? 0 : w - 1, y: y < 0 ? 0 : h - 1 }
+      }
+      if (x < 0) return { x: y, y: depthX - 1 }
+      if (x >= w) return { x: y, y: h - depthX }
+      if (y < 0) return { x: depthY - 1, y: x }
+      return { x: w - depthY, y: x }
     }
   }
 }

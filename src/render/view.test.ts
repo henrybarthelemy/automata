@@ -148,3 +148,42 @@ describe('fitView', () => {
     expect(view.x).toBeGreaterThanOrEqual(0)
   })
 })
+
+describe('view margins', () => {
+  // The seam annotations are drawn outside the world's edges, so the camera
+  // has to be allowed to sit slightly beyond them.
+
+  it('lets the camera pan past the edges by the margin', () => {
+    // Zoomed in far enough that the world overflows the viewport.
+    const clamped = clampView({ zoom: 10, x: -50, y: -50 }, 400, 300, 1000, 800, 6)
+    expect(clamped.x).toBe(-6)
+    expect(clamped.y).toBe(-6)
+  })
+
+  it('stops at the far edge plus the margin', () => {
+    const clamped = clampView({ zoom: 10, x: 9999, y: 9999 }, 400, 300, 1000, 800, 6)
+    expect(clamped.x).toBe(400 + 6 - 1000 / 10)
+    expect(clamped.y).toBe(300 + 6 - 800 / 10)
+  })
+
+  it('still centres on the world, not the margins, once everything fits', () => {
+    const clamped = clampView({ zoom: 1, x: 0, y: 0 }, 400, 300, 1000, 800, 6)
+    expect(clamped.x).toBe((400 - 1000) / 2)
+    expect(clamped.y).toBe((300 - 800) / 2)
+  })
+
+  it('zooms out far enough to show the margin around a fitted world', () => {
+    const bare = fitView(400, 300, 1000, 800)
+    const margined = fitView(400, 300, 1000, 800, 6)
+    expect(margined.zoom).toBeLessThan(bare.zoom)
+    // 412 cells across has to fit in 1000px.
+    expect(margined.zoom).toBeCloseTo(1000 / 412)
+  })
+
+  it('behaves exactly as before when no margin is asked for', () => {
+    expect(clampView({ zoom: 3, x: 20, y: 20 }, 400, 300, 1000, 800, 0)).toEqual(
+      clampView({ zoom: 3, x: 20, y: 20 }, 400, 300, 1000, 800),
+    )
+    expect(fitView(400, 300, 1000, 800, 0)).toEqual(fitView(400, 300, 1000, 800))
+  })
+})

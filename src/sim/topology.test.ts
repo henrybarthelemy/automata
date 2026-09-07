@@ -137,3 +137,48 @@ describe('topology metadata', () => {
     expect(effectiveTopology('klein', 400, 300)).toBe('klein')
   })
 })
+
+describe('wrapPoint beyond the halo ring', () => {
+  // The renderer draws a band of the neighbouring surface outside each edge,
+  // which needs the same question answered several cells out.
+
+  it('keeps translating on the surfaces that are plane quotients', () => {
+    // Six cells left of the left edge is six cells in from the right edge.
+    expect(wrapPoint('torus', -6, 10, 40, 30)).toEqual({ x: 34, y: 10 })
+    // The same, but the twist flips which row it lands on.
+    expect(wrapPoint('klein', -6, 10, 40, 30)).toEqual({ x: 34, y: 19 })
+    expect(wrapPoint('cross-surface', 12, 36, 40, 30)).toEqual({ x: 27, y: 6 })
+  })
+
+  it('carries a sphere band round the corner into the partner edge', () => {
+    // Top glues to left, so depth away from the top edge is distance along
+    // the left edge: (x, -k) reads (k - 1, x).
+    expect(wrapPoint('sphere', 7, -1, 20, 20)).toEqual({ x: 0, y: 7 })
+    expect(wrapPoint('sphere', 7, -4, 20, 20)).toEqual({ x: 3, y: 7 })
+    // Right glues to bottom: (w - 1 + k, y) reads (y, h - k).
+    expect(wrapPoint('sphere', 23, 7, 20, 20)).toEqual({ x: 7, y: 16 })
+  })
+
+  it('gives up on a sphere outside the corners', () => {
+    // Adjacent-edge gluing has no continuation diagonally out from a corner.
+    expect(wrapPoint('sphere', -1, -1, 20, 20)).toEqual({ x: 0, y: 0 })
+    expect(wrapPoint('sphere', -3, -3, 20, 20)).toBeNull()
+  })
+
+  it('still lands inside the world wherever it answers at all', () => {
+    for (const topology of TOPOLOGIES) {
+      if (topology.id === 'plane') continue
+      const [w, h] = topology.requiresSquare ? [16, 16] : [18, 12]
+      for (let y = -6; y < h + 6; y++) {
+        for (let x = -6; x < w + 6; x++) {
+          const p = wrapPoint(topology.id, x, y, w, h)
+          if (!p) continue
+          expect(p.x, `${topology.id} (${x}, ${y})`).toBeGreaterThanOrEqual(0)
+          expect(p.x).toBeLessThan(w)
+          expect(p.y).toBeGreaterThanOrEqual(0)
+          expect(p.y).toBeLessThan(h)
+        }
+      }
+    }
+  })
+})

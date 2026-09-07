@@ -56,7 +56,11 @@ direction is the main invariant to preserve:
 - `src/sim/hensel.ts`: the 51 isotropic non-totalistic orbit letters,
   transcribed from the symmetry group and cross-checked by `hensel.test.ts`.
 - `src/render/canvas2d.ts`, `palettes.ts`, `view.ts`: Canvas2D backend,
-  palettes compiled to lookup tables, and pure camera maths.
+  palettes compiled to lookup tables, and pure camera maths (with a `margin`
+  reserving room outside the world's edges).
+- `src/render/seams.ts`: makes the topology visible — fundamental-polygon
+  arrows and a band of what lies across each edge, both derived from
+  `wrapPoint()` rather than tabulated, so they cannot drift from the sim.
 - `src/state/useSimulation.ts`: owns the `World`, renderer, and `View` in
   refs, and runs the rAF loop. **React state is never touched per tick**;
   simulation results go into `statsRef` and are flushed to React state on a

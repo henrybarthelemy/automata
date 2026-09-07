@@ -1,7 +1,26 @@
 import type { World } from '../sim/world'
 import type { Pattern } from '../sim/rle'
-import { buildLuts, type Palette } from './palettes'
+import { accentColor, buildLuts, type Palette } from './palettes'
+import { buildSeamBands, seamMarks, SEAM_BAND, type SeamBand, type SeamMark } from './seams'
 import type { View } from './view'
+
+/** A scratch canvas one seam band is assembled in before being blitted. */
+interface BandBuffer {
+  canvas: HTMLCanvasElement
+  ctx: CanvasRenderingContext2D
+  image: ImageData
+  pixels: Uint32Array
+}
+
+function makeBandBuffer(width: number, height: number): BandBuffer {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d', { alpha: false })
+  if (!ctx) throw new Error('2D canvas context unavailable')
+  const image = ctx.createImageData(width, height)
+  return { canvas, ctx, image, pixels: new Uint32Array(image.data.buffer) }
+}
 
 /** A pattern ghosted at a grid position, before it is committed. */
 export interface Preview {
@@ -40,7 +59,17 @@ export class Canvas2DRenderer {
   private background = 0xff000000
   private backgroundCss = '#000000'
   private previewCss = '#ffffff'
+  private seamCss = '#ffffff'
   private dpr = 1
+
+  // Seam annotations. The index maps depend only on the topology and the
+  // world's size, so they are rebuilt on a change and reused every frame.
+  private showSeams = true
+  private seamKey = ''
+  private bands: SeamBand[] = []
+  private marks: SeamMark[] = []
+  private hBand: BandBuffer | null = null
+  private vBand: BandBuffer | null = null
 
   constructor(private canvas: HTMLCanvasElement, palette: Palette) {
     const ctx = canvas.getContext('2d', { alpha: false })
@@ -58,6 +87,7 @@ export class Canvas2DRenderer {
     this.background = packColor(palette.background)
     this.backgroundCss = palette.background
     this.previewCss = brightest(palette)
+    this.seamCss = accentColor(palette)
   }
 
   setPalette(palette: Palette): void {
@@ -67,6 +97,12 @@ export class Canvas2DRenderer {
     this.background = packColor(palette.background)
     this.backgroundCss = palette.background
     this.previewCss = brightest(palette)
+    this.seamCss = accentColor(palette)
+  }
+
+  /** Whether to annotate the edges with what lies across them. */
+  setShowSeams(show: boolean): void {
+    this.showSeams = show
   }
 
   /** The canvas fills its container; the view decides what's shown inside it. */
@@ -147,7 +183,146 @@ export class Canvas2DRenderer {
       visibleH * scale,
     )
 
+    if (this.showSeams) this.drawSeams(world, view, scale)
     if (preview) this.drawPreview(preview, view, scale)
+  }
+
+  /**
+   * Rebuild the seam data when the surface or the world's size changes. Two
+   * scratch canvases are enough for all four bands: the top and bottom share
+   * one laid out along the world's width, the left and right share the other.
+   */
+  private ensureSeams(world: World): void {
+    const key = `${world.topology}:${world.width}x${world.height}`
+    if (key === this.seamKey) return
+    this.seamKey = key
+    this.bands = buildSeamBands(world.topology, world.width, world.height, world.stride)
+    this.marks = seamMarks(world.topology, world.width, world.height)
+    this.hBand = makeBandBuffer(world.width, SEAM_BAND)
+    this.vBand = makeBandBuffer(SEAM_BAND, world.height)
+  }
+
+  /**
+   * A dimmed strip of whatever lies across each edge, plus the arrows of the
+   * fundamental polygon. Without these a Klein bottle and a torus are the same
+   * picture until something crosses a seam.
+   */
+  private drawSeams(world: World, view: View, scale: number): void {
+    this.ensureSeams(world)
+    const { cells, heat } = world
+    const { aliveLut, trailLut, background } = this
+
+    this.ctx.save()
+    this.ctx.imageSmoothingEnabled = false
+    this.ctx.globalAlpha = 0.32
+    for (const band of this.bands) {
+      // Keyed on the edge, not the buffer's width: a world only SEAM_BAND
+      // cells wide would otherwise route a horizontal band to the vertical
+      // scratch canvas.
+      const vertical = band.edge === 'left' || band.edge === 'right'
+      const target = vertical ? this.vBand : this.hBand
+      if (!target) continue
+      const { indices } = band
+      const { pixels } = target
+      for (let i = 0; i < indices.length; i++) {
+        const source = indices[i]
+        if (source < 0) {
+          pixels[i] = background
+          continue
+        }
+        const value = heat[source]
+        pixels[i] = cells[source]
+          ? aliveLut[value]
+          : value === 0
+            ? background
+            : trailLut[value]
+      }
+      target.ctx.putImageData(target.image, 0, 0)
+      this.ctx.drawImage(
+        target.canvas,
+        0,
+        0,
+        band.bufferW,
+        band.bufferH,
+        (band.originX - view.x) * scale,
+        (band.originY - view.y) * scale,
+        band.bufferW * scale,
+        band.bufferH * scale,
+      )
+    }
+    this.ctx.restore()
+
+    this.drawSeamOutline(world, view, scale)
+    for (const mark of this.marks) this.drawSeamArrows(mark, world, view, scale)
+  }
+
+  /** The world's own boundary, so the band reads as outside rather than part of it. */
+  private drawSeamOutline(world: World, view: View, scale: number): void {
+    this.ctx.save()
+    this.ctx.globalAlpha = 0.5
+    this.ctx.strokeStyle = this.seamCss
+    this.ctx.lineWidth = Math.max(1, this.dpr)
+    this.ctx.strokeRect(
+      (0 - view.x) * scale,
+      (0 - view.y) * scale,
+      world.width * scale,
+      world.height * scale,
+    )
+    this.ctx.restore()
+  }
+
+  /**
+   * Chevrons along one edge, in the notation used to draw a surface as a
+   * polygon with its edges identified: edges glued to each other carry the
+   * same number of arrowheads, and arrows that oppose mark a twisted seam.
+   */
+  private drawSeamArrows(mark: SeamMark, world: World, view: View, scale: number): void {
+    const horizontal = mark.edge === 'top' || mark.edge === 'bottom'
+    const length = horizontal ? world.width : world.height
+    const offset = SEAM_BAND / 2
+    // Down the middle of the band, on the outside of the edge it belongs to.
+    const across =
+      mark.edge === 'top' ? -offset
+      : mark.edge === 'bottom' ? world.height + offset
+      : mark.edge === 'left' ? -offset
+      : world.width + offset
+
+    const spanPx = length * scale
+    if (spanPx < 24) return
+    const count = Math.max(2, Math.min(20, Math.round(spanPx / (96 * this.dpr))))
+    const size = 5 * this.dpr
+
+    this.ctx.save()
+    this.ctx.globalAlpha = 0.9
+    this.ctx.strokeStyle = this.seamCss
+    this.ctx.lineWidth = 1.6 * this.dpr
+    this.ctx.lineCap = 'round'
+    this.ctx.lineJoin = 'round'
+
+    for (let i = 0; i < count; i++) {
+      const t = (length * (i + 0.5)) / count
+      const alongPx = horizontal ? (t - view.x) * scale : (t - view.y) * scale
+      const acrossPx = horizontal ? (across - view.y) * scale : (across - view.x) * scale
+      // A second arrowhead marks the other pair, the way a fundamental polygon
+      // labels its two edge classes.
+      for (let head = 0; head <= mark.pair; head++) {
+        const shift = head * size * 1.1 * mark.direction
+        this.ctx.beginPath()
+        for (const side of [-1, 1]) {
+          const tipAlong = alongPx + shift
+          const tailAlong = tipAlong - size * mark.direction
+          if (horizontal) {
+            this.ctx.moveTo(tailAlong, acrossPx + side * size)
+            this.ctx.lineTo(tipAlong, acrossPx)
+          } else {
+            this.ctx.moveTo(acrossPx + side * size, tailAlong)
+            this.ctx.lineTo(acrossPx, tipAlong)
+          }
+        }
+        this.ctx.stroke()
+      }
+    }
+    this.ctx.restore()
   }
 
   /**

@@ -94,6 +94,36 @@ A sphere joins edges of the same length, so it needs `width === height`.
 the simulation unrunnable, and the panel disables the option so the fallback is
 never what the user actually sees.
 
+### Drawing the topology
+
+Wrapping alone is invisible: a Klein bottle and a torus are the same picture
+until something crosses a seam. `src/render/seams.ts` says it up front, in two
+parts.
+
+**Arrows.** Each edge is drawn with the notation for a polygon whose edges are
+identified — edges glued to each other carry the same number of arrowheads, and
+arrows that oppose mark a twisted seam. `seamMarks()` does not tabulate this
+per topology; it asks `wrapPoint()` where two points along an edge come out,
+reads off which edge they landed on and whether their order reversed, and pairs
+the four edges from that. The picture therefore cannot drift from the
+simulation: it is derived from the same function the halo is checked against.
+
+**Bands.** `buildSeamBands()` returns a strip of the neighbouring surface just
+outside each edge, as flat `World.cells` indices laid out in screen
+orientation, so drawing one is a blit with no per-edge rotation. The mapping
+depends only on the topology and the world's size, never on the cells, so it is
+built once per change and reused every frame — the per-frame cost is an array
+lookup per band pixel, the same shape as the main draw.
+
+This is why `wrapPoint()` answers beyond the single halo ring. The four
+twisting surfaces are quotients of the plane by a group, so their formulas
+already hold at any distance; a sphere is not, and its diagonal regions return
+null past the first ring.
+
+The camera reserves `SEAM_BAND` cells outside every edge, via the `margin`
+argument to `clampView()` and `fitView()`. It is reserved whether or not the
+annotation is being drawn, so toggling it never moves the view.
+
 The cost is that **every index must be translated**: cell `(x, y)` lives at
 `(y + 1) * stride + (x + 1)`, via `World.index()`. Code that walks the arrays
 directly must account for the offset.
@@ -349,6 +379,7 @@ What is covered:
 | `sim/lifelike` | Rulestring parsing, normalisation, rejection of half-typed input, and the wording of the rejection |
 | `sim/hensel` | The 51 isotropic classes, recomputed from the symmetry group and compared against the table |
 | `ui/coachmark` | Tour-card placement: preferred side, flipping, centring, and staying inside the window |
+| `render/seams` | Edge pairing and arrow direction against the fundamental polygon for each surface, cross-checked against where `wrapPoint` actually sends each edge; band index maps |
 | `sim/rle` | Parsing real-world variations, rejecting non-RLE input, serialisation round-trips, line wrapping, rotation and flipping |
 | `render/view` | Zoom clamping, fit, edge clamping and centring, and the cursor-anchoring property |
 | `render/palettes` | Lookup table construction, ramp monotonicity, trail dimming |
@@ -423,5 +454,7 @@ worked around.
 - No persistence. Reloading loses the board; URL-encoded state is planned.
 - The grid is finite. Six topologies are selectable, but there is no infinite
   or growing grid, and no hexagonal or triangular tiling.
+- Stamps, the brush and RLE import clip at the edges rather than wrapping
+  through the topology.
 - Drawing while running races the simulation — edits land between steps, which
   is usually what you want but is not transactional.

@@ -251,6 +251,14 @@ export function ControlPanel({
               on a square world. On a <em>plane</em> nothing wraps and patterns
               die against the border.
             </p>
+            <p>
+              <strong>Show seams</strong> draws that gluing rather than leaving
+              you to infer it: a dimmed band outside each edge showing what
+              actually lies across it, and the arrows a topologist would put on
+              a polygon whose edges are identified. Edges glued to each other
+              carry the same number of arrowheads, and arrows that point
+              opposite ways are a seam with a twist in it.
+            </p>
           </>
         }
       >
@@ -283,6 +291,14 @@ export function ControlPanel({
           </select>
         </label>
         <p className="hint">{topologyById(params.topology).blurb}</p>
+        <label className="control-check">
+          <input
+            type="checkbox"
+            checked={params.showSeams}
+            onChange={(event) => onChange('showSeams', event.target.checked)}
+          />
+          <span>Show seams</span>
+        </label>
         <label className="control">
           <span className="control-label">World size</span>
           <select
