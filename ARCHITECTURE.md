@@ -124,6 +124,44 @@ The camera reserves `SEAM_BAND` cells outside every edge, via the `margin`
 argument to `clampView()` and `fitView()`. It is reserved whether or not the
 annotation is being drawn, so toggling it never moves the view.
 
+### Drawing the topology in three dimensions
+
+The flat view can only annotate the gluing; the shape itself needs geometry.
+`src/render/surfaces.ts` and `src/render/orbit.ts` are the maths for that, and
+they are deliberately free of Three.js and the DOM so they stay in the Node
+test suite. Only the renderer that consumes a mesh needs a graphics library.
+
+A topology says how the edges are glued; a **surface** is one way of sitting
+that gluing in space. The two are written independently — `wrapPoint()` in
+cells, the parametrisations in (u, v) — so the tests walk each seam asking the
+simulation where an edge cell continues and check the geometry puts it in the
+same place. That is what pins down the cell-parameter convention:
+
+> A cell's parameter is its **centre**, `(i + 0.5) / n`. With centres, the
+> discrete flip `y -> h-1-y` *is* the continuous flip `v -> 1-v`, exactly.
+> Indexing cells by their leading edge instead would put every seam half a cell
+> out — a misalignment that would read as a smear rather than an obvious break.
+
+Four surfaces exist so far: the torus (the only genuine embedding here), the
+figure-8 and classic-bottle immersions of the Klein bottle, and a flat sheet.
+`klein-h` reuses the Klein shapes with the parameters swapped, which moves the
+twist from one axis to the other. A cross-surface would need Boy's or Roman
+surface and the sphere's adjacent-edge gluing gives a pillow with cone points,
+so both are still 2D-only.
+
+Two details worth knowing. The classic bottle is written on a square whose seam
+falls at `v -> 1/2 - v`; a quarter-turn phase shift in `v` moves it onto ours,
+which is what lets both Klein shapes share one grid. And `buildSurfaceMesh()`
+builds the seam twice — the vertices at `u = 0` and `u = 1` are the same point
+in space but carry different texture coordinates, so cell data can be sampled
+without wrapping. Mesh resolution is independent of the world's, since cells
+are sampled from a texture rather than being geometry.
+
+A Klein bottle cannot be embedded in three dimensions, only immersed, so every
+shape for one passes through itself. That crossing is an artefact of the
+drawing: cells that appear to touch there are nowhere near each other on the
+grid and do not interact.
+
 The cost is that **every index must be translated**: cell `(x, y)` lives at
 `(y + 1) * stride + (x + 1)`, via `World.index()`. Code that walks the arrays
 directly must account for the offset.
@@ -379,6 +417,8 @@ What is covered:
 | `sim/lifelike` | Rulestring parsing, normalisation, rejection of half-typed input, and the wording of the rejection |
 | `sim/hensel` | The 51 isotropic classes, recomputed from the symmetry group and compared against the table |
 | `ui/coachmark` | Tour-card placement: preferred side, flipping, centring, and staying inside the window |
+| `render/surfaces` | Each immersion closing up exactly where `wrapPoint` says it should, the cell-centre convention, mesh integrity and bounding spheres |
+| `render/orbit` | Eye position round a target, elevation and distance clamping, drag and dolly directions, framing a sphere to the viewport |
 | `render/seams` | Edge pairing and arrow direction against the fundamental polygon for each surface, cross-checked against where `wrapPoint` actually sends each edge; band index maps |
 | `sim/rle` | Parsing real-world variations, rejecting non-RLE input, serialisation round-trips, line wrapping, rotation and flipping |
 | `render/view` | Zoom clamping, fit, edge clamping and centring, and the cursor-anchoring property |

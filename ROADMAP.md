@@ -38,7 +38,26 @@ Deliberately no commit hashes here — they go stale on every rebase, and
 
 ## In progress
 
-Nothing currently.
+**3D surface rendering** — drawing the grid on the shape itself rather than
+annotating a flat one. Phased, since only the last phase needs a graphics
+library:
+
+- **Phase A (done).** `src/render/surfaces.ts` and `orbit.ts`: parametrisations
+  of the torus, both Klein immersions and a plane, a mesh builder, and an orbit
+  camera. All pure maths, all in the Node suite. Each surface is tested to
+  close up exactly where `wrapPoint()` says it should, which also settled the
+  cell-parameter convention — centres, so the discrete flip and the continuous
+  one coincide with no half-cell offset.
+- **Phase B (next).** A Three.js renderer behind a dynamic `import()`, so the
+  2D bundle stays where it is. Cell and heat arrays upload as textures with no
+  per-step copy — the halo padding means they go as they are, with the UVs
+  offset past it. `buildLuts()` becomes a 256x1 palette texture and the colour
+  logic moves into the fragment shader; the wireframe comes from the UVs rather
+  than geometry.
+- **Phase C.** A 2D/3D toggle, orbit input, and a shape picker. Read-only at
+  first: draw in 2D, watch in 3D.
+- **Later.** Raycast picking to draw on the surface, camera follow, Boy's
+  surface for the cross-surface, and the sphere's pillow.
 
 ---
 

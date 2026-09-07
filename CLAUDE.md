@@ -58,6 +58,11 @@ direction is the main invariant to preserve:
 - `src/render/canvas2d.ts`, `palettes.ts`, `view.ts`: Canvas2D backend,
   palettes compiled to lookup tables, and pure camera maths (with a `margin`
   reserving room outside the world's edges).
+- `src/render/surfaces.ts`, `orbit.ts`: the maths for drawing the grid on the
+  actual shape — parametrisations of the torus, two Klein immersions and a
+  plane, tessellated to a mesh, plus an orbit camera. Free of Three.js and the
+  DOM so they stay unit tested; each surface is checked to close up exactly
+  where `wrapPoint()` says it should.
 - `src/render/seams.ts`: makes the topology visible — fundamental-polygon
   arrows and a band of what lies across each edge, both derived from
   `wrapPoint()` rather than tabulated, so they cannot drift from the sim.
