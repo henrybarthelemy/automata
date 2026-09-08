@@ -44,9 +44,10 @@ function expectSeamsAgreeWithWrapping(topology: TopologyId, surface: Surface) {
 describe('surfaces', () => {
   it('offers an immersion for the surfaces we can draw, and none for the rest', () => {
     expect(surfacesFor('torus').map((s) => s.id)).toEqual(['torus'])
-    expect(surfacesFor('klein').map((s) => s.id)).toEqual(['figure-8', 'classic'])
+    // The bottle first: it is what people picture when they hear the name.
+    expect(surfacesFor('klein').map((s) => s.id)).toEqual(['classic', 'figure-8'])
     // The same two shapes; klein-h is the same surface a quarter turn round.
-    expect(surfacesFor('klein-h').map((s) => s.id)).toEqual(['figure-8', 'classic'])
+    expect(surfacesFor('klein-h').map((s) => s.id)).toEqual(['classic', 'figure-8'])
     expect(surfacesFor('plane').map((s) => s.id)).toEqual(['plane'])
     // Boy's surface and the glued-square pillow are not built yet.
     expect(surfacesFor('cross-surface')).toEqual([])

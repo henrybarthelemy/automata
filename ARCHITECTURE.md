@@ -143,11 +143,14 @@ same place. That is what pins down the cell-parameter convention:
 > out — a misalignment that would read as a smear rather than an obvious break.
 
 Four surfaces exist so far: the torus (the only genuine embedding here), the
-figure-8 and classic-bottle immersions of the Klein bottle, and a flat sheet.
+classic-bottle and figure-8 immersions of the Klein bottle, and a flat sheet.
+`surfacesFor()` returns them best first, so a Klein bottle opens on the bottle
+shape people recognise rather than the figure-8.
 `klein-h` reuses the Klein shapes with the parameters swapped, which moves the
 twist from one axis to the other. A cross-surface would need Boy's or Roman
 surface and the sphere's adjacent-edge gluing gives a pillow with cone points,
-so both are still 2D-only.
+so both are still 2D-only — choosing one from the 3D view drops back to the
+flat one rather than leaving an empty canvas.
 
 Two details worth knowing. The classic bottle is written on a square whose seam
 falls at `v -> 1/2 - v`; a quarter-turn phase shift in `v` moves it onto ours,

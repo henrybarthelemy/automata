@@ -158,7 +158,8 @@ function swapAxes(surface: Surface): Surface {
 }
 
 /**
- * The shapes that realise a topology, best first. Empty where we have no
+ * The shapes that realise a topology, best first — the bottle before the
+ * figure-8, because it is the shape people recognise as a Klein bottle. Empty where we have no
  * immersion yet: a cross-surface would need Boy's or Roman surface, and the
  * sphere's adjacent-edge gluing gives a pillow with cone points at its
  * corners.
@@ -168,9 +169,9 @@ export function surfacesFor(topology: TopologyId): Surface[] {
     case 'torus':
       return [TORUS]
     case 'klein':
-      return [KLEIN_FIGURE8, KLEIN_CLASSIC]
+      return [KLEIN_CLASSIC, KLEIN_FIGURE8]
     case 'klein-h':
-      return [swapAxes(KLEIN_FIGURE8), swapAxes(KLEIN_CLASSIC)]
+      return [swapAxes(KLEIN_CLASSIC), swapAxes(KLEIN_FIGURE8)]
     case 'plane':
       return [PLANE]
     default:

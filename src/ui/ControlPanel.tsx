@@ -279,7 +279,14 @@ export function ControlPanel({
           <span className="control-label">Surface</span>
           <select
             value={params.topology}
-            onChange={(event) => onChange('topology', topologyById(event.target.value).id)}
+            onChange={(event) => {
+              const next = topologyById(event.target.value).id
+              onChange('topology', next)
+              // A cross-surface or sphere has no immersion to draw on, so
+              // choosing one from the 3D view has to fall back to the flat
+              // one rather than leave an empty canvas.
+              if (surfacesFor(next).length === 0) onChange('mode', '2d')
+            }}
           >
             {TOPOLOGIES.map((topology) => (
               <option
