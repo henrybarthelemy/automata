@@ -67,11 +67,11 @@ export default function App() {
           break
         case '+':
         case '=':
-          setZoom(sim.zoom * 1.4)
+          sim.zoomBy(1.4)
           break
         case '-':
         case '_':
-          setZoom(sim.zoom / 1.4)
+          sim.zoomBy(1 / 1.4)
           break
         case '0':
           fitToWorld()
@@ -89,7 +89,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [running, setRunning, stepOnce, clear, randomize, setZoom, fitToWorld, sim.zoom,
+  }, [running, setRunning, stepOnce, clear, randomize, sim.zoomBy, fitToWorld,
       stamp, rotateStamp, flipStamp, selectStamp, tourStep])
 
   return (

@@ -207,7 +207,17 @@ ever have one kind of context, so the 2D and WebGL renderers cannot share one.
 
 The 3D view is read-only: drawing, stamping and the brush all assume a flat
 neighbourhood, and near a self-intersection "nearby in space" is not "nearby on
-the grid".
+the grid". The panel follows one rule from that — **anything that works by
+pointing at the board is hidden in 3D rather than shown doing nothing** — which
+covers the brush, the pattern library and the flat zoom slider. The seam
+annotations go too, for a different reason: on the surface itself the gluing is
+the shape, so there is nothing left to annotate.
+
+Options that cannot be selected are left out rather than greyed, for the same
+reason. A disabled `<option>` has nowhere to explain the condition it is
+waiting on — the blurb under the dropdown only describes whichever topology is
+*selected* — so a greyed sphere was a dead end. It appears when the world is
+square.
 
 The cost is that **every index must be translated**: cell `(x, y)` lives at
 `(y + 1) * stride + (x + 1)`, via `World.index()`. Code that walks the arrays

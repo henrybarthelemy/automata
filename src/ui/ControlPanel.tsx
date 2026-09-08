@@ -103,6 +103,19 @@ export function ControlPanel({
   // Only some topologies have an immersion to draw on; the rest stay flat.
   const shapes = surfacesFor(params.topology)
 
+  // The 3D view is a viewer: anything that works by pointing at the board has
+  // nothing to point at yet, so it is left out rather than shown doing
+  // nothing. See the note in the View section.
+  const flat = params.mode === '2d'
+
+  // Adjacent edges can only be glued when they are the same length, so a
+  // sphere has nowhere to live on an oblong world. Left out rather than shown
+  // greyed: a disabled option cannot explain the condition it is waiting on,
+  // since the blurb below only describes whichever topology is selected.
+  const surfaceOptions = TOPOLOGIES.filter(
+    (topology) => !topology.requiresSquare || params.worldWidth === params.worldHeight,
+  )
+
   return (
     <aside className="panel">
       <header className="panel-header">
@@ -204,13 +217,15 @@ export function ControlPanel({
           format={(v) => `${v}/s`}
           onChange={(v) => onChange('speed', v)}
         />
-        <Slider
-          label="Brush"
-          value={params.brush}
-          min={1}
-          max={8}
-          onChange={(v) => onChange('brush', v)}
-        />
+        {flat && (
+          <Slider
+            label="Brush"
+            value={params.brush}
+            min={1}
+            max={8}
+            onChange={(v) => onChange('brush', v)}
+          />
+        )}
         <Slider
           label="Seed density"
           value={params.density}
@@ -222,16 +237,18 @@ export function ControlPanel({
         />
       </Section>
 
-      <PatternMenu
-        open={openSections.patterns}
-        onToggle={onToggleSection}
-        stamp={stamp}
-        selectStamp={selectStamp}
-        rotateStamp={rotateStamp}
-        flipStamp={flipStamp}
-        importRLE={importRLE}
-        exportRLE={exportRLE}
-      />
+      {flat && (
+        <PatternMenu
+          open={openSections.patterns}
+          onToggle={onToggleSection}
+          stamp={stamp}
+          selectStamp={selectStamp}
+          rotateStamp={rotateStamp}
+          flipStamp={flipStamp}
+          importRLE={importRLE}
+          exportRLE={exportRLE}
+        />
+      )}
 
       <Section
         id="view"
@@ -266,16 +283,18 @@ export function ControlPanel({
           </>
         }
       >
-        <Slider
-          label="Zoom"
-          value={toZoomTick(zoom)}
-          min={0}
-          max={ZOOM_TICKS}
-          format={() => (zoom < 1 ? `${zoom.toFixed(2)}x` : `${zoom.toFixed(zoom < 10 ? 1 : 0)}x`)}
-          onChange={(tick) => onZoom(fromZoomTick(tick))}
-        />
-        <button onClick={onFit}>Fit world</button>
-        <label className="control">
+        {flat && (
+          <Slider
+            label="Zoom"
+            value={toZoomTick(zoom)}
+            min={0}
+            max={ZOOM_TICKS}
+            format={() => (zoom < 1 ? `${zoom.toFixed(2)}x` : `${zoom.toFixed(zoom < 10 ? 1 : 0)}x`)}
+            onChange={(tick) => onZoom(fromZoomTick(tick))}
+          />
+        )}
+        <button onClick={onFit}>{flat ? 'Fit world' : 'Frame the shape'}</button>
+        <label className="control" data-tour="surface">
           <span className="control-label">Surface</span>
           <select
             value={params.topology}
@@ -288,28 +307,24 @@ export function ControlPanel({
               if (surfacesFor(next).length === 0) onChange('mode', '2d')
             }}
           >
-            {TOPOLOGIES.map((topology) => (
-              <option
-                key={topology.id}
-                value={topology.id}
-                // Adjacent edges can only be glued when they are the same
-                // length, so a sphere is unreachable on an oblong world.
-                disabled={topology.requiresSquare && params.worldWidth !== params.worldHeight}
-              >
+            {surfaceOptions.map((topology) => (
+              <option key={topology.id} value={topology.id}>
                 {topology.name}
               </option>
             ))}
           </select>
         </label>
         <p className="hint">{topologyById(params.topology).blurb}</p>
-        <label className="control-check">
-          <input
-            type="checkbox"
-            checked={params.showSeams}
-            onChange={(event) => onChange('showSeams', event.target.checked)}
-          />
-          <span>Show seams</span>
-        </label>
+        {flat && (
+          <label className="control-check">
+            <input
+              type="checkbox"
+              checked={params.showSeams}
+              onChange={(event) => onChange('showSeams', event.target.checked)}
+            />
+            <span>Show seams</span>
+          </label>
+        )}
         <label className="control">
           <span className="control-label">Draw on</span>
           <select
@@ -334,13 +349,21 @@ export function ControlPanel({
             </select>
           </label>
         )}
-        {params.mode === '3d' && (
+        {!flat && (
           <p className="hint">
-            Drag to turn the shape, scroll to move closer. Drawing and stamping
-            stay in the flat view for now. A Klein bottle cannot be embedded in
-            three dimensions, only immersed, so it passes through itself &mdash;
-            cells that appear to touch there are nowhere near each other on the
-            grid and do not interact.
+            Drag to turn the shape, scroll to move closer. Anything that works
+            by pointing at the board &mdash; drawing, the brush, stamping
+            patterns &mdash; stays in the flat view, so those controls are
+            hidden here. The seam arrows are gone too: on the surface itself the
+            gluing is the shape, and there is nothing left to annotate.
+          </p>
+        )}
+        {!flat && shapes.length > 0 && (
+          <p className="hint">
+            A Klein bottle cannot be embedded in three dimensions, only
+            immersed, so it passes through itself. Cells that appear to touch
+            where it crosses are nowhere near each other on the grid and do not
+            interact.
           </p>
         )}
         <label className="control">
@@ -471,9 +494,11 @@ export function ControlPanel({
       </Section>
 
       <footer className="hint">
-        Drag to draw, alt-drag to erase. <kbd>Space</kbd> play/pause,{' '}
-        <kbd>.</kbd> step, <kbd>N</kbd> randomize, <kbd>C</kbd> clear,{' '}
-        <kbd>+</kbd>/<kbd>-</kbd> zoom, <kbd>0</kbd> fit.
+        {flat ? 'Drag to draw, alt-drag to erase. ' : 'Drag to turn the shape. '}
+        <kbd>Space</kbd> play/pause, <kbd>.</kbd> step, <kbd>N</kbd> randomize,{' '}
+        <kbd>C</kbd> clear, <kbd>+</kbd>/<kbd>-</kbd>{' '}
+        {flat ? 'zoom' : 'closer/further'}, <kbd>0</kbd>{' '}
+        {flat ? 'fit' : 'frame'}.
       </footer>
     </aside>
   )

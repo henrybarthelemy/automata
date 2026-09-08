@@ -24,7 +24,7 @@ Deliberately no commit hashes here — they go stale on every rebase, and
 - Generations rules (`Bx/Sy/n`) with rule-driven state colouring
 - Isotropic non-totalistic rules in Hensel notation, on a shared 512-entry table
 - Collapsible panel sections with per-section info popovers
-- Six-step guided tour, launched from a button rather than on first load
+- Seven-step guided tour, launched from a button rather than on first load
 - Rulestring errors that name the offending character
 - Architecture and roadmap documentation
 - Population sparkline: last 200 generations, sampled per-step so fast
@@ -55,10 +55,17 @@ library:
   up far enough to be usable — a 2D/3D toggle, orbit and dolly, and a shape
   picker — plus a Tiny (64x48) world preset, without which cells on a shape are
   about a pixel across and read as noise.
-- **Phase C (next).** The polish the wiring skipped: disabling the paint
-  controls in 3D rather than leaving them inert, a tour step, remembering the
-  camera per shape, and deciding whether the seam annotations have any meaning
-  in 3D.
+- **Phase C (done).** The 3D view is coherent rather than half-wired. Every
+  control that works by pointing at the board — the brush, the pattern library,
+  the flat zoom — is hidden there instead of sitting inert, and so are the seam
+  annotations, since on the surface itself the gluing *is* the shape. "Fit
+  world" becomes "Frame the shape" and reframes the camera; the `+`, `-` and
+  `0` shortcuts drive whichever camera is looking. A tour step covers the
+  surface controls.
+
+  Deliberately not done: remembering the camera per shape. Refitting when the
+  shape changes is both simpler and better, since the shapes are different
+  enough sizes that a remembered distance would often be wrong.
 - **Later.** Raycast picking to draw on the surface, camera follow, Boy's
   surface for the cross-surface, and the sphere's pillow.
 

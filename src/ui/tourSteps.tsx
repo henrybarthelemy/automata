@@ -1,8 +1,9 @@
 import type { TourStep } from './Tour'
 
 /**
- * Six stops, in the order someone actually needs them: see the world, make it
- * move, change the law it obeys, drop in something known, restyle it, read it.
+ * Seven stops, in the order someone actually needs them: see the world, make it
+ * move, change the law it obeys, drop in something known, bend the space it
+ * lives in, restyle it, read it.
  */
 export const TOUR_STEPS: TourStep[] = [
   {
@@ -78,6 +79,29 @@ export const TOUR_STEPS: TourStep[] = [
         <p>
           The Gosper glider gun is the one to try first &mdash; it settles into
           emitting a glider every 30 generations, forever.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'surface',
+    target: '[data-tour="surface"]',
+    section: 'view',
+    side: 'right',
+    title: 'Bend the space',
+    body: (
+      <>
+        <p>
+          The grid is finite, so its edges have to go somewhere. A{' '}
+          <strong>torus</strong> joins each edge to the one opposite. A{' '}
+          <strong>Klein bottle</strong> joins one pair with a half turn, and a
+          glider crossing that seam comes back mirrored, travelling the other
+          way.
+        </p>
+        <p>
+          <strong>Show seams</strong> draws the gluing on the flat view, and{' '}
+          <strong>Draw on &rarr; the surface itself</strong> stops drawing it
+          and shows you the shape instead.
         </p>
       </>
     ),

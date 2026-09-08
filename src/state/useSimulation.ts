@@ -535,12 +535,36 @@ export function useSimulation(params: SimParams) {
     return serializeRLE(pattern, { rule: paramsRef.current.rule })
   }, [])
 
+  /** "Fit" means the whole world in frame, whichever camera is looking at it. */
   const fitToWorld = useCallback(() => {
     const world = worldRef.current
     if (!world) return
+    if (paramsRef.current.mode === '3d') {
+      frame3d()
+      return
+    }
     const { width, height } = sizeRef.current
     commitView(fitView(world.width, world.height, width, height, SEAM_BAND))
-  }, [commitView])
+  }, [commitView, frame3d])
+
+  /**
+   * Zoom by a factor rather than to a value, so the keyboard shortcuts mean
+   * the same thing in both views: a flat zoom in one, a shorter camera arm in
+   * the other.
+   */
+  const zoomBy = useCallback(
+    (factor: number) => {
+      if (paramsRef.current.mode === '3d') {
+        dollyBy(factor)
+        return
+      }
+      const { width, height } = sizeRef.current
+      commitView(
+        zoomAbout(viewRef.current, clampZoom(viewRef.current.zoom * factor), width / 2, height / 2),
+      )
+    },
+    [commitView, dollyBy],
+  )
 
   return {
     containerRef,
@@ -565,6 +589,7 @@ export function useSimulation(params: SimParams) {
     setZoom,
     panBy,
     fitToWorld,
+    zoomBy,
     stamp,
     selectStamp,
     moveStamp,
