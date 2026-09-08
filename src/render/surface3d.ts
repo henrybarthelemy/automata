@@ -189,7 +189,11 @@ export class Surface3DRenderer {
 
   resize(cssWidth: number, cssHeight: number, dpr: number): void {
     this.renderer.setPixelRatio(dpr)
-    this.renderer.setSize(cssWidth, cssHeight, false)
+    // The third argument must not be false. It suppresses the canvas's CSS
+    // size, leaving the element to lay out at its attribute size - the backing
+    // buffer, so `dpr` times too big - inside a clipping container, which puts
+    // the middle of the picture in the corner of the viewport.
+    this.renderer.setSize(cssWidth, cssHeight, true)
     this.aspect = cssHeight > 0 ? cssWidth / cssHeight : 1
     this.camera.aspect = this.aspect
     this.camera.updateProjectionMatrix()
