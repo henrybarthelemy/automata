@@ -123,6 +123,10 @@ export default function App() {
       <Viewport
         containerRef={sim.containerRef}
         canvasRef={sim.canvasRef}
+        canvas3dRef={sim.canvas3dRef}
+        mode={params.mode}
+        orbitBy={sim.orbitBy}
+        dollyBy={sim.dollyBy}
         paint={sim.paint}
         cellAt={sim.cellAt}
         zoomAt={sim.zoomAt}

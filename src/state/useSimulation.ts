@@ -6,6 +6,8 @@ import { parseRLE, serializeRLE, rotatePattern, flipPattern, type Pattern } from
 import { paletteById } from '../render/palettes'
 import { clampView, clampZoom, fitView, zoomAbout, type View } from '../render/view'
 import { SEAM_BAND } from '../render/seams'
+import { Surface3DRenderer } from '../render/surface3d'
+import { clampOrbit, orbitDolly, orbitDrag, type Orbit } from '../render/orbit'
 import { createHistory, type Sample } from './history'
 import type { TopologyId } from '../sim/topology'
 
@@ -20,6 +22,10 @@ export interface SimParams {
   topology: TopologyId
   /** Annotate the edges with arrows and a band of what lies across them. */
   showSeams: boolean
+  /** Flat rectangle, or the shape the topology actually makes. */
+  mode: '2d' | '3d'
+  /** Which immersion to draw in 3D, when the topology offers a choice. */
+  shape: string
   density: number
   brush: number
   worldWidth: number
@@ -27,6 +33,9 @@ export interface SimParams {
 }
 
 export const WORLD_PRESETS = [
+  // Coarse enough that individual cells stay legible wrapped onto a shape,
+  // where the whole grid has to fit in the width of the viewport at once.
+  { id: 'tiny', name: 'Tiny (64 x 48)', width: 64, height: 48 },
   { id: 'small', name: 'Small (200 x 150)', width: 200, height: 150 },
   { id: 'medium', name: 'Medium (400 x 300)', width: 400, height: 300 },
   { id: 'large', name: 'Large (800 x 600)', width: 800, height: 600 },
@@ -43,6 +52,8 @@ export const DEFAULT_PARAMS: SimParams = {
   paletteId: 'ember',
   topology: 'torus',
   showSeams: true,
+  mode: '2d',
+  shape: 'figure-8',
   density: 0.28,
   brush: 2,
   worldWidth: 400,
@@ -58,9 +69,14 @@ const HISTORY_CAPACITY = 200
 export function useSimulation(params: SimParams) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // A canvas can only ever have one kind of context, so 2D and 3D each get
+  // their own and the inactive one is hidden rather than torn down.
+  const canvas3dRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const rendererRef = useRef<Canvas2DRenderer | null>(null)
+  const renderer3dRef = useRef<Surface3DRenderer | null>(null)
   const viewRef = useRef<View>({ zoom: 4, x: 0, y: 0 })
+  const orbitRef = useRef<Orbit>({ azimuth: 0.9, elevation: 0.42, distance: 8 })
   const sizeRef = useRef({ width: 0, height: 0 })
   const paramsRef = useRef(params)
   const ruleRef = useRef<Rule>(parseRule(CONWAY)!)
@@ -95,8 +111,14 @@ export function useSimulation(params: SimParams) {
    */
   const drawNow = useCallback(() => {
     const world = worldRef.current
+    if (!world) return
+    if (paramsRef.current.mode === '3d') {
+      renderer3dRef.current?.draw(world, orbitRef.current)
+      needsDrawRef.current = false
+      return
+    }
     const renderer = rendererRef.current
-    if (!world || !renderer) return
+    if (!renderer) return
     const pattern = stampRef.current
     const at = previewRef.current
     renderer.draw(world, viewRef.current, pattern && at ? { pattern, x: at.x, y: at.y } : null)
@@ -130,6 +152,7 @@ export function useSimulation(params: SimParams) {
 
   useEffect(() => {
     rendererRef.current?.setPalette(paletteById(params.paletteId))
+    renderer3dRef.current?.setPalette(paletteById(params.paletteId))
     drawNow()
   }, [params.paletteId, drawNow])
 
@@ -173,7 +196,9 @@ export function useSimulation(params: SimParams) {
     const measure = () => {
       const rect = container.getBoundingClientRect()
       sizeRef.current = { width: rect.width, height: rect.height }
-      rendererRef.current!.resize(rect.width, rect.height, window.devicePixelRatio || 1)
+      const dpr = window.devicePixelRatio || 1
+      rendererRef.current!.resize(rect.width, rect.height, dpr)
+      renderer3dRef.current?.resize(rect.width, rect.height, dpr)
     }
 
     measure()
@@ -190,6 +215,83 @@ export function useSimulation(params: SimParams) {
     observer.observe(container)
     return () => observer.disconnect()
   }, [params.worldWidth, params.worldHeight, commitView])
+
+  /**
+   * Frame the shape and redraw. The mesh has to exist before the camera can be
+   * placed against it, which is what `prepare` is for.
+   */
+  const frame3d = useCallback(() => {
+    const renderer = renderer3dRef.current
+    const world = worldRef.current
+    if (!renderer || !world) return
+    renderer.prepare(world)
+    const { radius } = renderer.getFraming()
+    orbitRef.current = clampOrbit({ ...orbitRef.current, distance: renderer.fitDistance() }, radius)
+    needsDrawRef.current = true
+    drawNow()
+  }, [drawNow])
+
+  // Three.js arrives through a dynamic import, so the 3D renderer only exists
+  // once the view has been asked for, and nothing of it reaches the bundle
+  // until then.
+  useEffect(() => {
+    if (params.mode !== '3d') return
+    const canvas = canvas3dRef.current
+    if (!canvas) return
+    let cancelled = false
+
+    Surface3DRenderer.create(canvas, paletteById(paramsRef.current.paletteId)).then(
+      (renderer) => {
+        if (cancelled) {
+          renderer.dispose()
+          return
+        }
+        renderer3dRef.current = renderer
+        renderer.setShape(paramsRef.current.shape)
+        const { width, height } = sizeRef.current
+        renderer.resize(width, height, window.devicePixelRatio || 1)
+        frame3d()
+      },
+      (error) => console.error('3D view unavailable', error),
+    )
+
+    return () => {
+      cancelled = true
+      renderer3dRef.current?.dispose()
+      renderer3dRef.current = null
+    }
+  }, [params.mode, frame3d])
+
+  useEffect(() => {
+    if (!renderer3dRef.current) return
+    renderer3dRef.current.setShape(params.shape)
+    frame3d()
+  }, [params.shape, params.topology, frame3d])
+
+  const orbitBy = useCallback(
+    (dxCss: number, dyCss: number) => {
+      const renderer = renderer3dRef.current
+      if (!renderer) return
+      orbitRef.current = clampOrbit(
+        orbitDrag(orbitRef.current, dxCss, dyCss),
+        renderer.getFraming().radius,
+      )
+      needsDrawRef.current = true
+      drawNow()
+    },
+    [drawNow],
+  )
+
+  const dollyBy = useCallback(
+    (factor: number) => {
+      const renderer = renderer3dRef.current
+      if (!renderer) return
+      orbitRef.current = orbitDolly(orbitRef.current, factor, renderer.getFraming().radius)
+      needsDrawRef.current = true
+      drawNow()
+    },
+    [drawNow],
+  )
 
   // Depends on the world size too: `World.resize` drops a sphere back to a
   // torus when the world stops being square, so the choice has to be reapplied
@@ -239,9 +341,13 @@ export function useSimulation(params: SimParams) {
       }
 
       if (needsDrawRef.current) {
-        const pattern = stampRef.current
-        const at = previewRef.current
-        renderer.draw(world, viewRef.current, pattern && at ? { pattern, x: at.x, y: at.y } : null)
+        if (paramsRef.current.mode === '3d') {
+          renderer3dRef.current?.draw(world, orbitRef.current)
+        } else {
+          const pattern = stampRef.current
+          const at = previewRef.current
+          renderer.draw(world, viewRef.current, pattern && at ? { pattern, x: at.x, y: at.y } : null)
+        }
         needsDrawRef.current = false
       }
 
@@ -439,6 +545,9 @@ export function useSimulation(params: SimParams) {
   return {
     containerRef,
     canvasRef,
+    canvas3dRef,
+    orbitBy,
+    dollyBy,
     running,
     setRunning,
     stats,

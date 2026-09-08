@@ -514,3 +514,13 @@ button.tour-start:hover {
   accent-color: var(--accent);
   margin: 0;
 }
+
+/* Both canvases stay mounted: a canvas can only ever have one kind of
+   context, so 2D and 3D each keep their own and the idle one is hidden. */
+.viewport canvas[hidden] {
+  display: none;
+}
+
+.viewport canvas.orbiting {
+  cursor: grab;
+}

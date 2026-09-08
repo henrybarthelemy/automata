@@ -48,16 +48,22 @@ library:
   close up exactly where `wrapPoint()` says it should, which also settled the
   cell-parameter convention — centres, so the discrete flip and the continuous
   one coincide with no half-cell offset.
-- **Phase B (next).** A Three.js renderer behind a dynamic `import()`, so the
-  2D bundle stays where it is. Cell and heat arrays upload as textures with no
-  per-step copy — the halo padding means they go as they are, with the UVs
-  offset past it. `buildLuts()` becomes a 256x1 palette texture and the colour
-  logic moves into the fragment shader; the wireframe comes from the UVs rather
-  than geometry.
-- **Phase C.** A 2D/3D toggle, orbit input, and a shape picker. Read-only at
-  first: draw in 2D, watch in 3D.
+- **Phase B (done).** `src/render/surface3d.ts`, behind a dynamic `import()`:
+  three lands in its own chunk, so opening the app costs about 5KB more rather
+  than 190KB. Cell and heat arrays upload with no per-step copy, `buildLuts()`
+  becomes a 256x2 palette texture, and the wireframe comes from the UVs. Wired
+  up far enough to be usable — a 2D/3D toggle, orbit and dolly, and a shape
+  picker — plus a Tiny (64x48) world preset, without which cells on a shape are
+  about a pixel across and read as noise.
+- **Phase C (next).** The polish the wiring skipped: disabling the paint
+  controls in 3D rather than leaving them inert, a tour step, remembering the
+  camera per shape, and deciding whether the seam annotations have any meaning
+  in 3D.
 - **Later.** Raycast picking to draw on the surface, camera follow, Boy's
   surface for the cross-surface, and the sphere's pillow.
+
+The 3D view is read-only, and only the torus, both Klein bottles and the plane
+have a shape to draw on; a cross-surface or sphere falls back to the flat view.
 
 ---
 

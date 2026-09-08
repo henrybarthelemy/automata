@@ -3,6 +3,7 @@ import type { StepStats } from '../sim/world'
 import { accentColor, paletteById, PALETTES } from '../render/palettes'
 import { MAX_ZOOM, MIN_ZOOM } from '../render/view'
 import { TOPOLOGIES, topologyById } from '../sim/topology'
+import { surfacesFor } from '../render/surfaces'
 import { PatternMenu } from './PatternMenu'
 import { Section } from './Section'
 import { Sparkline } from './Sparkline'
@@ -99,6 +100,9 @@ export function ControlPanel({
   onToggleSection,
   onStartTour,
 }: ControlPanelProps) {
+  // Only some topologies have an immersion to draw on; the rest stay flat.
+  const shapes = surfacesFor(params.topology)
+
   return (
     <aside className="panel">
       <header className="panel-header">
@@ -299,6 +303,39 @@ export function ControlPanel({
           />
           <span>Show seams</span>
         </label>
+        <label className="control">
+          <span className="control-label">Draw on</span>
+          <select
+            value={params.mode}
+            onChange={(event) => onChange('mode', event.target.value === '3d' ? '3d' : '2d')}
+          >
+            <option value="2d">Flat rectangle</option>
+            <option value="3d" disabled={shapes.length === 0}>
+              The surface itself
+            </option>
+          </select>
+        </label>
+        {params.mode === '3d' && shapes.length > 1 && (
+          <label className="control">
+            <span className="control-label">Shape</span>
+            <select value={params.shape} onChange={(event) => onChange('shape', event.target.value)}>
+              {shapes.map((shape) => (
+                <option key={shape.id} value={shape.id}>
+                  {shape.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {params.mode === '3d' && (
+          <p className="hint">
+            Drag to turn the shape, scroll to move closer. Drawing and stamping
+            stay in the flat view for now. A Klein bottle cannot be embedded in
+            three dimensions, only immersed, so it passes through itself &mdash;
+            cells that appear to touch there are nowhere near each other on the
+            grid and do not interact.
+          </p>
+        )}
         <label className="control">
           <span className="control-label">World size</span>
           <select

@@ -63,6 +63,10 @@ direction is the main invariant to preserve:
   plane, tessellated to a mesh, plus an orbit camera. Free of Three.js and the
   DOM so they stay unit tested; each surface is checked to close up exactly
   where `wrapPoint()` says it should.
+- `src/render/surface3d.ts`: the Three.js renderer, behind a dynamic
+  `import()` so none of it reaches the bundle until the 3D view is opened.
+  Cells are sampled from a texture rather than being geometry, and the
+  halo-padded arrays upload with no per-step copy.
 - `src/render/seams.ts`: makes the topology visible — fundamental-polygon
   arrows and a band of what lies across each edge, both derived from
   `wrapPoint()` rather than tabulated, so they cannot drift from the sim.

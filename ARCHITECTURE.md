@@ -162,6 +162,50 @@ shape for one passes through itself. That crossing is an artefact of the
 drawing: cells that appear to touch there are nowhere near each other on the
 grid and do not interact.
 
+### The 3D renderer
+
+`src/render/surface3d.ts` is the only file that knows about Three.js, and it is
+reached through a dynamic `import()`. Three is a third of a megabyte gzipped —
+more than twice the rest of the app — so it is built as its own chunk and
+fetched the first time the 3D view is opened. Opening the app costs about 5KB
+more than before, not 190KB.
+
+**Cells are not geometry.** They are sampled from a texture in the fragment
+shader, which is what keeps mesh resolution independent of world size: a 64x48
+board and a 1600x1200 board both draw the same 256x128 quads, and a step costs
+one texture upload rather than a rebuilt mesh. Three details make that cheap:
+
+- The cell and heat arrays are uploaded **without a copy**. They are already
+  halo-padded, so they go to the GPU exactly as they are, as `stride` by
+  `height + 2` single-channel textures, and the shader steps over the border
+  when it converts a UV to a texel. `unpackAlignment` has to be 1, because rows
+  of a one-byte-per-texel image are not four-byte aligned unless the stride
+  happens to be a multiple of four, and it usually is not.
+- The texture is re-pointed at `world.cells` every frame rather than holding a
+  reference. The world ping-pongs its two cell buffers each step, so a
+  reference taken when the texture was built goes stale immediately.
+- `buildLuts()` is reused as-is: both 256-entry ramps become one 256x2 RGBA
+  texture, trails on the lower row and living cells on the upper one, and the
+  colour logic from the 2D inner loop becomes three lines of GLSL.
+
+The wireframe comes from the UVs rather than from geometry, and fades out once
+a cell is down to about a pixel, so a large world does not turn into a solid
+sheet of grid lines. Shading uses the *magnitude* of the facing dot product:
+the surface is non-orientable, so a normal has no consistent outward sense, and
+taking the magnitude shades both faces alike while still darkening the
+silhouette.
+
+Transparency is approximated by drawing back faces and then front faces, both
+with depth writes off. A per-triangle sort would be correct and would not fit
+in a frame at this vertex count.
+
+Two canvases stay mounted side by side, the idle one hidden. A canvas can only
+ever have one kind of context, so the 2D and WebGL renderers cannot share one.
+
+The 3D view is read-only: drawing, stamping and the brush all assume a flat
+neighbourhood, and near a self-intersection "nearby in space" is not "nearby on
+the grid".
+
 The cost is that **every index must be translated**: cell `(x, y)` lives at
 `(y + 1) * stride + (x + 1)`, via `World.index()`. Code that walks the arrays
 directly must account for the offset.
