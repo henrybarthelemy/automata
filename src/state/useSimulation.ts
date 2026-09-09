@@ -231,6 +231,28 @@ export function useSimulation(params: SimParams) {
     drawNow()
   }, [drawNow])
 
+  /**
+   * Which surface the world lives on, and which shape it is drawn as.
+   *
+   * One effect rather than two, because the order matters: the renderer
+   * decides whether to rebuild its mesh by comparing `world.topology`, so the
+   * world has to be told before the renderer is asked to reframe. Split apart,
+   * that sequencing rested on nothing but the order the two effects happened to
+   * be declared in, and getting it backwards left the 3D view showing the
+   * previous shape until something else forced a redraw.
+   *
+   * The world's size is a dependency because `World.resize` drops a sphere back
+   * to a torus when the world stops being square, so the choice has to be
+   * reapplied once a resize makes it legal again. The size effect is declared
+   * above, so the world is already the right size by the time this runs.
+   */
+  useEffect(() => {
+    worldRef.current?.setTopology(params.topology)
+    if (!renderer3dRef.current) return
+    renderer3dRef.current.setShape(params.shape)
+    frame3d()
+  }, [params.topology, params.shape, params.worldWidth, params.worldHeight, frame3d])
+
   // Three.js arrives through a dynamic import, so the 3D renderer only exists
   // once the view has been asked for, and nothing of it reaches the bundle
   // until then.
@@ -262,12 +284,6 @@ export function useSimulation(params: SimParams) {
     }
   }, [params.mode, frame3d])
 
-  useEffect(() => {
-    if (!renderer3dRef.current) return
-    renderer3dRef.current.setShape(params.shape)
-    frame3d()
-  }, [params.shape, params.topology, frame3d])
-
   const orbitBy = useCallback(
     (dxCss: number, dyCss: number) => {
       const renderer = renderer3dRef.current
@@ -292,14 +308,6 @@ export function useSimulation(params: SimParams) {
     },
     [drawNow],
   )
-
-  // Depends on the world size too: `World.resize` drops a sphere back to a
-  // torus when the world stops being square, so the choice has to be reapplied
-  // once a resize makes it legal again. The size effect above is declared
-  // first, so it has already run by the time this does.
-  useEffect(() => {
-    worldRef.current?.setTopology(params.topology)
-  }, [params.topology, params.worldWidth, params.worldHeight])
 
   // The loop. Fixed timestep, decoupled from render; React state is never
   // touched per tick.
